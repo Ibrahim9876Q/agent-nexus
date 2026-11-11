@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.nexus/
+.nexus-schema/
+.env
+*.log
+*.db*
+auth.json
+**/.codex/
+vault/
+coverage/
