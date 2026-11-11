@@ -1,17 +1,24 @@
 # Desktop workspace
 
 Double-click `Launch Nexus.cmd` in the checkout, or run `npm run desktop`.
-The packaged Windows application is `release-desktop/Agent Nexus 0.2.0.exe`.
-Node.js 24+ must be installed and on PATH; install the official Codex CLI for real account execution.
+The live app starts on an empty Command tab. Connect your real Codex accounts, add a Git repository, and open a workspace through the gear. Send your first prompt to start a real coordinator task. Opening a workspace never runs inference by itself.
 
-The app opens Command first, followed by Brain and Agents. The gear button opens account/repository/project setup. Add any number of independently authenticated accounts; complete each official sign-in in your system browser and return to Verify. This avoids collecting passwords or embedding an authentication webview.
+The packaged Windows application is `release-desktop/Agent Nexus 0.2.0.exe`. Node.js 24.13+ must be installed and on PATH; install the official Codex CLI for real account execution. Native Codex discovery searches PATH and standard Windows installations automatically. You can override it with NEXUS_CODEX_BIN.
 
-Command supports account-targeted or project-wide directives, plans, project pause and scheduling resume. Active turns receive supported steering. Idle tasks queue continuation. A dispatch receipt records each worker's outcome; it does not claim that queued work was already processed. Pause and resume apply to the entire selected project. Interrupted tasks require explicit resume from Agents.
+The three tabs are Command, Brain and Agents. Brain shows project records and Git-observed contributions, including delegation and dependencies. Agents shows real runtime output, errors and messages. Account readiness is refreshed on restart, but completed or interrupted work is not silently rerun.
 
-Brain is an interactive force graph of actual project records: repositories, accounts, workers, tasks, delegation, prerequisites, communication, and worktree branches. File nodes show declared task scopes and observed Git changes relative to the repository's current HEAD, including untracked files. Branch links are contributions, not evidence a PR was merged. Click a worker node to inspect it and open its stream. Pan the empty canvas, scroll to zoom, or use the controls.
+Sign-in begins inside the app and completes in the official system-browser flow. Use Sign in, follow the secure link, then Verify. Sign into accounts sequentially. Ready status means authentication exists; a completed task establishes actual inference access. Credentials are isolated per account and never copied from another application.
 
-Agents shows each worker's assignment, branch, worktree, streamed text and messages. Codex must be signed in and a real task started before real inference output appears. Mock tasks remain explicitly identified.
+Directives to active workers use steering. Directives sent during startup are queued. Idle tasks receive continuation. Pause/resume modes affect project scheduling; interrupted tasks require explicit Resume in Agents. Approval gates remain active.
 
-The desktop renderer has no Node integration; it talks to a loopback-only backend started by the app. Closing the window stops its backend, and interrupted work is recovered explicitly on restart. Packaged state is under the OS application data directory; development mode uses the checkout's `.nexus` directory. The EXE is unsigned. No public hosting or GitHub publication is needed.
+Live source data is `.nexus/live/`; packaged live data is `workspace-live/` under the OS application-data directory. Existing legacy demo data is preserved in its old location and is not loaded. The renderer has no Node integration and uses a loopback-only backend; the repository folder picker exposes only a narrow desktop IPC method.
 
-Build with `npm run desktop:build`. This prepares a minimal backend runtime and a portable Electron executable. The runtime depends on installed Node.js 24+ and does not bundle account credentials.
+## Mock installation
+
+For optional scripted testing, run `npm run mock:desktop`. It opens an isolated app instance with a MOCK INSTALLATION banner, mock-only account setup, and a Run three-account simulation button. Its data is `.nexus/mock-installation/`. You can also run `npm run mock:demo` from the terminal.
+
+Mock workers and the simulation API are disabled in the live app. Automated RPC fixture tests are explicitly labeled and are not used for real execution.
+
+## Build
+
+Run `npm run desktop:build` to prepare the backend runtime and portable Windows executable. The runtime does not bundle credentials. The EXE is unsigned and still needs installed Node.js and Codex.

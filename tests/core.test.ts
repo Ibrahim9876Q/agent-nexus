@@ -197,6 +197,7 @@ test('restart preserves records and marks in-flight work interrupted', async () 
   store = new Store(db);
   engine = new Engine(store, root);
   assert.equal(store.get('tasks', task.id).status, 'interrupted');
+  assert.equal(store.get('projects', p.id).status, 'paused');
   engine.retry(task.id);
   assert.equal(store.get('tasks', task.id).status, 'pending');
   await engine.stop();

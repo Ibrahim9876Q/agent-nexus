@@ -13,6 +13,7 @@ import type {
 import { Brain } from './brain';
 import './workspace.css';
 export type State = {
+  installation: 'live' | 'mock';
   accounts: Account[];
   agents: Agent[];
   tasks: Task[];
@@ -45,6 +46,7 @@ function App() {
     [settings, setSettings] = useState(false),
     [auth, setAuth] = useState(''),
     [selected, setSelected] = useState(''),
+    [repoPath, setRepoPath] = useState(''),
     [busy, setBusy] = useState(false);
   useEffect(() => {
     let dead = false,
@@ -77,9 +79,6 @@ function App() {
       ws?.close();
     };
   }, []);
-  useEffect(() => {
-    if (s && !project && s.projects[0]) setProject(s.projects[0].id);
-  }, [s, project]);
   async function act(fn: () => Promise<unknown>) {
     setError('');
     try {
@@ -107,12 +106,13 @@ function App() {
     ),
     activeTask =
       visibleTasks.find((t) => t.agentId === selected) || visibleTasks[0];
+  const ready = s.accounts.some((a) => a.status === 'ready');
   const form = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     return Object.fromEntries(new FormData(e.currentTarget));
   };
   async function send() {
-    if (!prompt.trim() || !project) return;
+    if (!prompt.trim() || !project || !ready) return;
     setBusy(true);
     try {
       await act(() =>
@@ -224,6 +224,11 @@ function App() {
         </div>
       </aside>
       <section className="surface">
+        {s.installation === 'mock' && (
+          <div className="mock-banner">
+            MOCK INSTALLATION · Scripted workers only · Separate test data
+          </div>
+        )}
         <div className="tabbar">
           {['Command', 'Brain', 'Agents'].map((name, i) => (
             <button
@@ -284,41 +289,44 @@ function App() {
               {!commands.length && (
                 <div className="welcome">
                   <div className="terminal-symbol">›_</div>
-                  <span>COMMAND CENTER</span>
+                  <span>
+                    {project ? 'COMMAND CENTER' : 'NO WORKSPACE OPEN'}
+                  </span>
                   <h1>
-                    One prompt.
-                    <br />
-                    Your entire team.
+                    {project
+                      ? 'What would you like to build?'
+                      : 'Open your workspace.'}
                   </h1>
                   <p>
-                    Plan a project, redirect a worker, or coordinate every
-                    account.
-                    <br />
-                    Your instructions enter the same live workspace.
+                    {project
+                      ? 'Your first prompt starts the coordinator. Tasks, messages, and contributions appear as your agents work.'
+                      : 'Connect your Codex accounts and open a local Git project to begin. No agents run until you send a prompt.'}
                   </p>
-                  <div className="quick-prompts">
-                    {[
-                      'Inspect the repository and plan the next milestone.',
-                      'Review the current work and identify blockers.',
-                      'Coordinate implementation and independent tests.',
-                    ].map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => {
-                          setPrompt(p);
-                          setMode('plan');
-                        }}
-                      >
-                        {p} ↗
-                      </button>
-                    ))}
-                  </div>
+                  {project && (
+                    <div className="quick-prompts">
+                      {[
+                        'Inspect the repository and plan the next milestone.',
+                        'Review the current work and identify blockers.',
+                        'Coordinate implementation and independent tests.',
+                      ].map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => {
+                            setPrompt(p);
+                            setMode('plan');
+                          }}
+                        >
+                          {p} ↗
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {!project && (
                     <button
                       className="accent"
                       onClick={() => setSettings(true)}
                     >
-                      Set up accounts & a repository →
+                      Connect accounts & open workspace →
                     </button>
                   )}
                 </div>
@@ -356,6 +364,20 @@ function App() {
                   ))}
             </div>
             <div className="composer">
+              {project &&
+                s.projects.find((p) => p.id === project)?.status ===
+                  'paused' && (
+                  <p className="setup-required">
+                    Scheduling is paused. Choose “Resume scheduling” to
+                    continue. Interrupted tasks still require Resume in Agents.
+                  </p>
+                )}
+              {project && !ready && (
+                <p className="setup-required">
+                  Sign into a Codex account in workspace setup to start real
+                  work.
+                </p>
+              )}
               <div className="composer-options">
                 <select
                   aria-label="Command destination"
@@ -363,11 +385,13 @@ function App() {
                   onChange={(e) => setTarget(e.target.value)}
                 >
                   <option value="all">◎ All project workers</option>
-                  {s.accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} · {a.provider}
-                    </option>
-                  ))}
+                  {s.accounts
+                    .filter((a) => a.status === 'ready')
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} · {a.provider}
+                      </option>
+                    ))}
                 </select>
                 <select
                   aria-label="Command mode"
@@ -381,6 +405,7 @@ function App() {
                 </select>
               </div>
               <textarea
+                disabled={!project || !ready}
                 aria-label="Master prompt"
                 placeholder={
                   project
@@ -400,7 +425,7 @@ function App() {
                 <span>Inherited permissions · approval gates active</span>
                 <button
                   className="accent"
-                  disabled={busy || !project || !prompt.trim()}
+                  disabled={busy || !project || !ready || !prompt.trim()}
                   onClick={() => void send()}
                 >
                   Send directive ↑
@@ -555,6 +580,11 @@ function App() {
               <h2>Workspace setup</h2>
               <button onClick={() => setSettings(false)}>×</button>
             </div>
+            {error && (
+              <div className="error" role="alert">
+                {error}
+              </div>
+            )}
             <p>
               Connect each account separately using official Codex sign-in.
               Complete the secure login in your browser, then verify here.
@@ -565,12 +595,13 @@ function App() {
                 <div>
                   <strong>{a.name}</strong>
                   <small>
-                    {a.provider} · {a.detail || a.status}
+                    {a.status} · {a.detail || a.provider}
                   </small>
                 </div>
                 {a.provider === 'codex' && (
                   <>
                     <button
+                      disabled={a.status === 'signing-in'}
                       onClick={() =>
                         void act(async () => {
                           const r = await api(`/accounts/${a.id}/login`, {});
@@ -587,6 +618,27 @@ function App() {
                     >
                       Verify
                     </button>
+                    {a.status === 'signing-in' && (
+                      <button
+                        onClick={() =>
+                          void act(async () => {
+                            await api(`/accounts/${a.id}/cancel-login`, {});
+                            setAuth('');
+                          })
+                        }
+                      >
+                        Cancel sign-in
+                      </button>
+                    )}
+                    {a.status === 'ready' && (
+                      <button
+                        onClick={() =>
+                          void act(() => api(`/accounts/${a.id}/logout`, {}))
+                        }
+                      >
+                        Sign out
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -609,10 +661,13 @@ function App() {
               }}
             >
               <input name="name" required placeholder="Account name" />
-              <select name="provider">
-                <option value="codex">Codex / ChatGPT</option>
-                <option value="mock">Simulation</option>
-              </select>
+              {s.installation === 'mock' ? (
+                <select name="provider">
+                  <option value="mock">Simulation</option>
+                </select>
+              ) : (
+                <input type="hidden" name="provider" value="codex" />
+              )}
               <button>Add account</button>
             </form>
             <h3>02 / Repository</h3>
@@ -623,7 +678,27 @@ function App() {
               }}
             >
               <input name="name" required placeholder="Repository name" />
-              <input name="path" required placeholder="C:\Projects\your-repo" />
+              <input
+                name="path"
+                required
+                placeholder="C:\Projects\your-repo"
+                value={repoPath}
+                onChange={(e) => setRepoPath(e.target.value)}
+              />
+              {window.nexusDesktop && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void act(async () => {
+                      const path =
+                        await window.nexusDesktop!.chooseRepository();
+                      if (path) setRepoPath(path);
+                    })
+                  }
+                >
+                  Browse…
+                </button>
+              )}
               <button>Add local repo</button>
             </form>
             <h3>03 / Project</h3>
@@ -634,6 +709,8 @@ function App() {
                 void act(async () => {
                   const p = await api('/projects', v);
                   setProject(p.id);
+                  setTarget('all');
+                  setTab('Command');
                   setSettings(false);
                 });
               }}
@@ -659,23 +736,28 @@ function App() {
               </select>
               <textarea
                 name="objective"
-                required
-                placeholder="Initial project objective"
+                placeholder="Workspace description (optional). Send your first instruction from Command."
               />
-              <button className="accent">Create project</button>
+              <button className="accent" disabled={!ready}>
+                Open project workspace
+              </button>
             </form>
-            <hr />
-            <button
-              onClick={() =>
-                void act(async () => {
-                  const r = await api('/demo', {});
-                  setProject(r.project.id);
-                  setSettings(false);
-                })
-              }
-            >
-              Run three-account simulation
-            </button>
+            {s.installation === 'mock' && (
+              <>
+                <hr />
+                <button
+                  onClick={() =>
+                    void act(async () => {
+                      const r = await api('/demo', {});
+                      setProject(r.project.id);
+                      setSettings(false);
+                    })
+                  }
+                >
+                  Run three-account simulation
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

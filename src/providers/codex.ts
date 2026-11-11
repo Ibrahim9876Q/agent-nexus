@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Account } from '../types.ts';
+import { resolveCodex } from './resolve-codex.ts';
 
 // Protocol shape verified against codex 0.167.0-alpha.3.2 generate-ts --experimental.
 // RPC values are validated at the Nexus tool boundary; provider notifications vary by version.
@@ -21,7 +22,8 @@ export class CodexConnection extends EventEmitter {
   private startPromise?: Promise<void>;
   constructor(
     readonly home: string,
-    readonly executable = process.env.NEXUS_CODEX_BIN || 'codex',
+    readonly executable?: string,
+    private launchArgs?: string[],
   ) {
     super();
   }
@@ -51,8 +53,8 @@ export class CodexConnection extends EventEmitter {
     ])
       delete env[key];
     this.proc = spawn(
-      this.executable,
-      [
+      this.executable || resolveCodex(),
+      this.launchArgs || [
         'app-server',
         '--listen',
         'stdio://',
@@ -150,13 +152,15 @@ export class Accounts {
   constructor(
     private dataDir: string,
     private attach: (account: Account, c: CodexConnection) => void,
+    private factory: (home: string) => CodexConnection = (home) =>
+      new CodexConnection(home),
   ) {}
   async connection(account: Account) {
     if (account.provider !== 'codex')
       throw new Error('Mock account has no Codex connection');
     let c = this.connections.get(account.id);
     if (!c) {
-      c = new CodexConnection(join(this.dataDir, 'accounts', account.id));
+      c = this.factory(join(this.dataDir, 'accounts', account.id));
       this.connections.set(account.id, c);
       this.attach(account, c);
     }

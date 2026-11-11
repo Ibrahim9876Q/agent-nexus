@@ -12,13 +12,16 @@ import { Engine } from './engine.ts';
 import { git } from './integrations/git.ts';
 import { Knowledge } from './integrations/knowledge.ts';
 import { executeMock, seedSimulation } from './simulation.ts';
+import { runtimeConfig } from './runtime-mode.ts';
 
 export async function createNexusServer(
-  dataDir = resolve(process.env.NEXUS_DATA_DIR || '.nexus'),
+  dataDir = runtimeConfig().dataDir,
   port = Number(process.env.NEXUS_PORT || 4310),
+  options: { mock?: boolean } = {},
 ) {
+  const mock = options.mock ?? runtimeConfig().mock;
   const store = new Store(join(dataDir, 'nexus.db')),
-    engine = new Engine(store, dataDir, { execute: executeMock });
+    engine = new Engine(store, dataDir, mock ? { execute: executeMock } : {});
   const knowledge = new Knowledge(join(dataDir, 'knowledge'));
   const app = express(),
     server = createServer(app),
@@ -63,7 +66,11 @@ export async function createNexusServer(
     }
     next();
   });
-  app.get('/api/state', (_req, res) => res.json(engine.snapshot()));
+  const snapshot = () => ({
+    ...engine.snapshot(),
+    installation: mock ? 'mock' : 'live',
+  });
+  app.get('/api/state', (_req, res) => res.json(snapshot()));
   app.get('/api/projects/:id/contributions', async (req, res) => {
     const p = store.get('projects', req.params.id),
       repo = store.get('repos', p.repoId),
@@ -107,14 +114,27 @@ export async function createNexusServer(
   app.post('/api/command', async (req, res) =>
     res.json(await engine.command(req.body)),
   );
-  app.post('/api/accounts', (req, res) =>
-    res.json(engine.addAccount(req.body)),
-  );
+  app.post('/api/accounts', (req, res) => {
+    if (
+      (!mock && req.body.provider !== 'codex') ||
+      (mock && req.body.provider !== 'mock')
+    )
+      throw new Error(
+        'Live installations accept Codex accounts only; mock installations accept mock accounts only.',
+      );
+    res.json(engine.addAccount(req.body));
+  });
   app.post('/api/accounts/:id/verify', async (req, res) =>
     res.json(await engine.verify(req.params.id)),
   );
   app.post('/api/accounts/:id/login', async (req, res) =>
     res.json(await engine.login(req.params.id)),
+  );
+  app.post('/api/accounts/:id/logout', async (req, res) =>
+    res.json(await engine.logout(req.params.id)),
+  );
+  app.post('/api/accounts/:id/cancel-login', async (req, res) =>
+    res.json(await engine.cancelLogin(req.params.id)),
   );
   app.patch('/api/accounts/:id', (req, res) => {
     const input = z
@@ -153,24 +173,24 @@ export async function createNexusServer(
       .object({
         repoId: z.string().uuid(),
         name: z.string().min(1),
-        objective: z.string().min(1),
+        objective: z.string().default(''),
         accountId: z.string().uuid(),
       })
       .strict()
       .parse(req.body);
-    const p = engine.addProject(v.repoId, v.name, v.objective);
-    const a = engine.addAgent(
-      v.accountId,
-      p.id,
-      'coordinator',
-      undefined,
-      'read-only',
-    );
-    engine.addTask(
-      a.id,
-      'Plan project',
-      `Inspect the repository, then use nexus_plan to submit a bounded implementation DAG for this objective: ${v.objective}. Assign work only to accounts with the same provider as yours. You may delegate research helpers. Include independent review after implementation. Do not claim work is complete until verified.`,
-    );
+    const account = store.get('accounts', v.accountId);
+    if (account.status !== 'ready' || (!mock && account.provider !== 'codex'))
+      throw new Error(
+        'Sign into a real coordinator account before opening a workspace.',
+      );
+    const p = store.put('projects', {
+      ...engine.addProject(
+        v.repoId,
+        v.name,
+        v.objective || `Workspace: ${v.name}`,
+      ),
+      coordinatorAccountId: account.id,
+    });
     res.json(p);
   });
   app.post('/api/projects/:id/pause', async (req, res) => {
@@ -299,9 +319,15 @@ export async function createNexusServer(
       .parse(req.body);
     res.json(await knowledge.add(req.params.projectId, v.title, v.body));
   });
-  app.post('/api/demo', async (_req, res) =>
-    res.json(await seedSimulation(engine)),
-  );
+  app.post('/api/demo', async (_req, res) => {
+    if (!mock) {
+      res
+        .status(404)
+        .json({ error: 'Simulation is disabled in the live application.' });
+      return;
+    }
+    res.json(await seedSimulation(engine));
+  });
   if (existsSync(resolve('dist/index.html'))) {
     app.use(express.static(resolve('dist')));
     app.get('/', (_req, res) => res.sendFile(resolve('dist/index.html')));
@@ -339,14 +365,14 @@ export async function createNexusServer(
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
-      ws.send(JSON.stringify(engine.snapshot()));
+      ws.send(JSON.stringify(snapshot()));
     });
   });
   let broadcastTimer: NodeJS.Timeout | undefined;
   store.on('change', () => {
     broadcastTimer ??= setTimeout(() => {
       broadcastTimer = undefined;
-      const state = JSON.stringify(engine.snapshot());
+      const state = JSON.stringify(snapshot());
       for (const client of wss.clients)
         if (
           client.readyState === WebSocket.OPEN &&
@@ -356,6 +382,11 @@ export async function createNexusServer(
     }, 100);
   });
   engine.start();
+  // Refresh account readiness on restart without starting any inference task.
+  for (const account of store
+    .all('accounts')
+    .filter((a) => a.provider === 'codex'))
+    void engine.verify(account.id).catch(() => {});
   return {
     app,
     server,
@@ -396,5 +427,8 @@ if (
   });
   process.on('SIGTERM', () => {
     void stop();
+  });
+  process.on('message', (message: unknown) => {
+    if ((message as { type?: string })?.type === 'shutdown') void stop();
   });
 }

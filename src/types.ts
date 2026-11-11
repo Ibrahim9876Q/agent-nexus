@@ -11,6 +11,7 @@ export type Account = {
 };
 export type Repo = { id: string; name: string; path: string };
 export type Project = {
+  coordinatorAccountId?: string;
   id: string;
   repoId: string;
   name: string;

@@ -13,7 +13,7 @@ test(
   { timeout: 30000 },
   async () => {
     const root = await mkdtemp(join(tmpdir(), 'nexus-http-'));
-    const nexus = await createNexusServer(root, 0);
+    const nexus = await createNexusServer(root, 0, { mock: true });
     nexus.server.listen(0, '127.0.0.1');
     await once(nexus.server, 'listening');
     const address = nexus.server.address();

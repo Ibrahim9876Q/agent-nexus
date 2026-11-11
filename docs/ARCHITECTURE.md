@@ -2,6 +2,8 @@
 
 The dashboard and API run in one local Node process. Every real account owns a separate official Codex app-server process over stdio. A worker identity corresponds to one resumable thread. Worker-level children get separate threads and worktrees; native research children are runtime-managed and communicate externally through their parent.
 
+Normal launches use the live installation, with no seeded data or mock execution. Optional scripted testing requires `npm run mock:desktop`, uses a different database and app instance, and is visibly labeled. Opening a project creates no agents or tasks; the user's first prompt starts planning. Persisted projects restart paused, so account reauthentication cannot silently resume queued work. Native executable discovery and login errors surface in account setup.
+
 ```mermaid
 flowchart LR
   UI[React dashboard] <-->|HTTP + WebSocket| API[Local Nexus server]

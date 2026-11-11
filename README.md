@@ -8,7 +8,7 @@ Built with Electron, React, TypeScript, SQLite, and the official Codex app-serve
 
 > **Early MVP — Windows first.** The automated simulation, scheduler, messaging, and Git workflows are tested. Three isolated Codex processes and coordination-tool registration have been verified. Full multi-account inference still needs validation after you sign in on your own machine. Native UI verification was limited by automation permissions during development.
 
-[Quick start](#quick-start-on-a-windows-laptop) · [First test](#first-test-no-codex-login-needed) · [Connect accounts](#connect-your-real-accounts) · [Use the workspace](#use-the-workspace) · [Troubleshooting](#troubleshooting)
+[Quick start](#quick-start-on-a-windows-laptop) · [Live workspace](#first-launch-an-empty-real-workspace) · [Connect accounts](#connect-your-real-accounts) · [Mock installation](#mock-installation) · [Troubleshooting](#troubleshooting)
 
 ## The workspace
 
@@ -77,9 +77,28 @@ npm.cmd run desktop
 
 You can also double-click **Launch Nexus.cmd** in the checkout after dependencies and the frontend have been built.
 
-## First test: no Codex login needed
+## First launch: an empty, real workspace
 
-1. Launch the app and click the **gear** in the lower-left ribbon.
+`npm.cmd run desktop` opens the live application. It contains no sample accounts, greeting project, scripted tasks, or prefilled chat. The simulation endpoint and mock accounts are disabled in this mode.
+
+1. Open the gear and connect your real Codex accounts as described below.
+2. Add a local Git repository and open its project workspace.
+3. Send your first prompt in **Command**. Opening a project does not start any AI work by itself.
+4. Follow actual runtime output in **Agents** and contributions in **Brain**.
+
+Old sample data is preserved in its previous location and is not loaded by the live app. Fresh source installations use `.nexus/live`; the optional mock installation uses `.nexus/mock-installation`.
+
+## Mock installation
+
+This is a separate, optional developer test environment. It is not part of normal setup and cannot supply scripted results to the live app.
+
+```powershell
+npm.cmd run mock:desktop
+```
+
+This opens a separate app instance with a **MOCK INSTALLATION** banner and its own database.
+
+1. Launch the mock installation above and click the **gear** in the lower-left ribbon.
 2. Click **Run three-account simulation** at the bottom of Workspace setup.
 3. The generated project becomes selected. Open **Agents** to follow its tasks.
 4. Open **Brain** to inspect account ownership, delegated workers, dependencies, worktree branches, and changed files.
@@ -93,10 +112,10 @@ For terminal-only verification:
 
 ```powershell
 npm.cmd test
-npm.cmd run demo
+npm.cmd run mock:demo
 ```
 
-The current suite contains **14 tests**, including command targeting, nested delegation, message retries, recovery, HTTP/WebSocket access controls, Git contribution discovery, and two repositories running concurrently.
+The automated tests cover live/mock isolation, empty startup, opening a workspace without starting tasks, native executable discovery, subprocess RPC, command targeting, delegation, message retries, recovery, Git contributions, and concurrent repositories. The subprocess test uses an explicitly labeled protocol fixture; it does not claim an authenticated model inference succeeded.
 
 ## Connect your real accounts
 
@@ -109,7 +128,7 @@ npm.cmd install -g @openai/codex
 codex --version
 ```
 
-Nexus starts the **native Codex executable** directly. A Windows npm `.cmd` or `.ps1` wrapper is insufficient for that process launch. Before launching Nexus for real-account testing, locate the executable and pass its path in the same PowerShell window:
+Nexus starts the **native Codex executable** directly and automatically searches PATH, the installed Codex desktop binary directory, and the standard Windows npm installation. If automatic discovery fails, locate the executable and pass its path in the same PowerShell window:
 
 ```powershell
 # Prefer a native executable already on PATH.
@@ -175,9 +194,9 @@ In Nexus, open **Workspace setup**:
 
 1. Under **02 / Repository**, enter a name and the full local path, such as `C:\Users\YourName\Documents\nexus-test-project`. Click **Add local repo**.
 2. Under **03 / Project**, enter a project name, select that repository and a verified coordinator account, and enter an objective.
-3. Click **Create project**. This immediately queues the coordinator's initial planning task.
+3. Click **Open project workspace**. The workspace stays idle until you send a prompt from Command.
 
-Suggested first objective:
+Suggested first prompt in Command:
 
 ```text
 Build a tiny greeting application using plain JavaScript and Node's built-in
@@ -213,7 +232,7 @@ Review the current work, identify blockers, and report what remains.
 Keep the API contract stable. Focus on tests before adding more features.
 ```
 
-Choose one account to address its project workers, or **All project workers** to direct the whole project's team. Read the dispatch receipt: accepted, queued, starting, and failed delivery are different outcomes. A worker still starting may need the directive resent once it is running.
+Choose one account to address its project workers, or **All project workers** to direct the whole project's team. Read the dispatch receipt: accepted, queued, and failed delivery are different outcomes. Directives arriving during worker startup are queued and steered into its turn after it starts.
 
 ### Brain: inspect connections and contributions
 
@@ -269,11 +288,12 @@ npm.cmd run build
 npm.cmd run desktop
 ```
 
-| Launch mode                         | Private workspace state                                          |
-| ----------------------------------- | ---------------------------------------------------------------- |
-| Source launcher / `npm run desktop` | `.nexus/` inside your checkout.                                  |
-| Packaged EXE                        | Electron's per-user application-data folder, under `workspace/`. |
-| Browser/server mode                 | `.nexus/` by default; configurable through `NEXUS_DATA_DIR`.     |
+| Launch mode                         | Private workspace state                                               |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| Source launcher / `npm run desktop` | `.nexus/live/` inside your checkout.                                  |
+| Mock source launcher                | `.nexus/mock-installation/` inside your checkout.                     |
+| Packaged EXE                        | Electron's per-user application-data folder, under `workspace-live/`. |
+| Browser/server mode                 | `.nexus/live/` by default; configurable through `NEXUS_DATA_DIR`.     |
 
 These locations contain the database, account homes, conversations, worktrees, simulation repositories, and optional notes. Source and packaged launches use separate workspace locations. A fresh packaged app can therefore look empty even if you tested from source.
 

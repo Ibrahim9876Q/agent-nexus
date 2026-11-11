@@ -884,3 +884,15 @@ footer {
     flex-direction: column;
   }
 }
+
+.mock-banner {
+  padding: 8px 22px;
+  background: #413323;
+  color: #e2c79b;
+  font: 11px Consolas;
+}
+.setup-required {
+  font-size: 11px;
+  color: #c5a6e5;
+  margin: 5px 0 12px;
+}

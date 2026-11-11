@@ -16,7 +16,9 @@
     "demo": "tsx scripts/demo.ts",
     "check:codex": "tsx scripts/check-codex.ts",
     "desktop": "electron .",
-    "desktop:build": "npm run build && node scripts/prepare-desktop.cjs && electron-builder --win portable"
+    "desktop:build": "npm run build && node scripts/prepare-desktop.cjs && electron-builder --win portable",
+    "mock:desktop": "node scripts/mock-installation.cjs",
+    "mock:demo": "tsx scripts/demo.ts"
   },
   "dependencies": {
     "d3-force": "^3.0.1",
@@ -53,7 +55,8 @@
     },
     "files": [
       "main.cjs",
-      "package.json"
+      "package.json",
+      "preload.cjs"
     ],
     "extraResources": [
       {

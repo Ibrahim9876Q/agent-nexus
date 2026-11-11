@@ -30,6 +30,7 @@ const planSchema = z
   .strict();
 export type RunHooks = {
   execute?: (task: Task, agent: Agent, engine: Engine) => Promise<string>;
+  connectionFactory?: (home: string) => CodexConnection;
 };
 export class Engine {
   bus: Bus;
@@ -38,7 +39,12 @@ export class Engine {
   globalConcurrency = 6;
   private active = new Map<
     string,
-    { turnId?: string; connection?: CodexConnection; cancelled?: boolean }
+    {
+      turnId?: string;
+      connection?: CodexConnection;
+      cancelled?: boolean;
+      queuedInput?: string[];
+    }
   >();
   private approvals = new Map<string, (approved: boolean) => void>();
   private timer?: NodeJS.Timeout;
@@ -46,6 +52,7 @@ export class Engine {
   private closing = false;
   private runs = new Set<Promise<void>>();
   private stalled = new Set<string>();
+  private logins = new Map<string, string>();
   constructor(
     readonly store: Store,
     readonly dataDir: string,
@@ -53,7 +60,13 @@ export class Engine {
   ) {
     this.bus = new Bus(store);
     this.git = new GitService(join(dataDir, 'worktrees'));
-    this.accounts = new Accounts(dataDir, (a, c) => this.attach(a, c));
+    this.accounts = new Accounts(
+      dataDir,
+      (a, c) => this.attach(a, c),
+      hooks.connectionFactory,
+    );
+    for (const project of store.all('projects'))
+      store.put('projects', { ...project, status: 'paused' });
     for (const t of store.all('tasks').filter((t) => t.status === 'running'))
       store.put('tasks', {
         ...t,
@@ -92,22 +105,75 @@ export class Engine {
   async verify(accountId: string) {
     const a = this.store.get('accounts', accountId);
     if (a.provider === 'mock') return a;
-    const c = await this.accounts.connection(a);
-    const result = await c.request('account/read', { refreshToken: false });
-    return this.store.put('accounts', {
-      ...a,
-      status: result.account ? 'ready' : 'signed-out',
-      detail:
-        result.account?.type === 'chatgpt'
-          ? `ChatGPT ${result.account.planType ?? ''}`
-          : (result.account?.type ?? 'Sign in required'),
-    });
+    try {
+      const c = await this.accounts.connection(a);
+      const result = await c.request('account/read', { refreshToken: false });
+      return this.store.put('accounts', {
+        ...a,
+        status: result.account ? 'ready' : 'signed-out',
+        detail:
+          result.account?.type === 'chatgpt'
+            ? `${result.account.email || 'ChatGPT'} · ${result.account.planType ?? ''}`
+            : (result.account?.type ?? 'Sign in required'),
+      });
+    } catch (e) {
+      this.store.put('accounts', {
+        ...a,
+        status: 'error',
+        detail: e instanceof Error ? e.message : String(e),
+      });
+      throw e;
+    }
   }
   async login(accountId: string) {
+    if (
+      this.store
+        .all('accounts')
+        .some((a) => a.status === 'signing-in' && a.id !== accountId)
+    )
+      throw new Error('Finish or cancel the other account login first.');
+    const a = this.store.get('accounts', accountId);
     const c = await this.accounts.connection(
       this.store.get('accounts', accountId),
     );
-    return c.request('account/login/start', { type: 'chatgpt' });
+    const result = await c.request('account/login/start', { type: 'chatgpt' });
+    if (result.loginId) this.logins.set(accountId, result.loginId);
+    this.store.put('accounts', {
+      ...a,
+      status: 'signing-in',
+      detail: 'Complete the official browser login, then verify.',
+    });
+    return result;
+  }
+  async cancelLogin(accountId: string) {
+    const a = this.store.get('accounts', accountId),
+      loginId = this.logins.get(accountId);
+    if (loginId) {
+      const c = await this.accounts.connection(a);
+      await c.request('account/login/cancel', { loginId });
+      this.logins.delete(accountId);
+    }
+    return this.store.put('accounts', {
+      ...a,
+      status: 'signed-out',
+      detail: 'Sign-in cancelled.',
+    });
+  }
+  async logout(accountId: string) {
+    const a = this.store.get('accounts', accountId);
+    if (
+      this.store
+        .all('agents')
+        .some((w) => w.accountId === a.id && w.status === 'running')
+    )
+      throw new Error('Interrupt account tasks before signing out.');
+    const c = await this.accounts.connection(a);
+    await c.request('account/logout');
+    return this.store.put('accounts', {
+      ...a,
+      status: 'signed-out',
+      detail: 'Sign in required',
+    });
   }
   async command(input: unknown) {
     const v = z
@@ -149,10 +215,12 @@ export class Engine {
       } else if (v.mode === 'plan' || !targets.length) {
         const account = v.accountId
           ? this.store.get('accounts', v.accountId)
-          : this.store
-              .all('accounts')
-              .find((a) => a.provider === 'codex' && a.status === 'ready');
-        if (!account)
+          : project.coordinatorAccountId
+            ? this.store.get('accounts', project.coordinatorAccountId)
+            : this.store
+                .all('accounts')
+                .find((a) => a.provider === 'codex' && a.status === 'ready');
+        if (!account || account.status !== 'ready')
           throw new Error(
             'Connect and select a ready coordinator account first.',
           );
@@ -188,7 +256,8 @@ export class Engine {
               });
               results.push(`${a.role}: accepted by active turn`);
             } else if (active) {
-              results.push(`${a.role}: starting; retry directive once running`);
+              (active.queuedInput ??= []).push(v.text);
+              results.push(`${a.role}: directive queued until its turn starts`);
             } else {
               this.store.put('tasks', {
                 ...task,
@@ -352,6 +421,10 @@ export class Engine {
     tasks.forEach((t) => {
       if (this.store.get('accounts', t.accountId).provider !== provider)
         throw new Error('Plans cannot mix simulated and real accounts');
+      if (this.store.get('accounts', t.accountId).status !== 'ready')
+        throw new Error(
+          'Plan assigns work to an account that is not signed in.',
+        );
       visit(t.key);
     });
     return this.store.transaction(() => {
@@ -378,6 +451,12 @@ export class Engine {
       return {
         accounts: this.store
           .all('accounts')
+          .filter(
+            (account) =>
+              account.status === 'ready' &&
+              account.provider ===
+                this.store.get('accounts', a.accountId).provider,
+          )
           .map(({ id, name, provider }) => ({ id, name, provider })),
         agents: this.store
           .all('agents')
@@ -549,7 +628,11 @@ export class Engine {
       if (account.provider === 'mock') {
         const output = this.hooks.execute
           ? await this.hooks.execute(t, agent, this)
-          : 'Simulation task completed. No Codex usage consumed; no implementation was generated.';
+          : (() => {
+              throw new Error(
+                'Mock execution is disabled. Start a separate mock installation.',
+              );
+            })();
         this.finish(
           t.id,
           this.active.get(t.id)?.cancelled ? 'interrupted' : 'completed',
@@ -601,6 +684,15 @@ export class Engine {
         const running = this.active.get(t.id);
         if (running) {
           running.turnId = turn.turn.id;
+          for (const directive of running.queuedInput || [])
+            await c.request('turn/steer', {
+              threadId,
+              expectedTurnId: running.turnId,
+              input: [
+                { type: 'text', text: `User master directive: ${directive}` },
+              ],
+            });
+          running.queuedInput = [];
           if (running.cancelled)
             await c.request('turn/interrupt', {
               threadId,
@@ -707,6 +799,17 @@ export class Engine {
     c.on('notification', (msg: any) => {
       if (this.closing) return;
       if (msg.method === 'account/login/completed') {
+        this.logins.delete(account.id);
+        if (msg.params?.success) void this.verify(account.id).catch(() => {});
+        else
+          this.store.put('accounts', {
+            ...this.store.get('accounts', account.id),
+            status: 'signed-out',
+            detail: msg.params?.error || 'Sign-in was cancelled.',
+          });
+        return;
+      }
+      if (msg.method === 'account/updated') {
         void this.verify(account.id).catch(() => {});
         return;
       }
