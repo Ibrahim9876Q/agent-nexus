@@ -429,7 +429,7 @@ svg {
   flex-shrink: 0;
   border: 1px solid #5caee928;
   border-radius: 24px;
-  padding: 17px 19px 14px;
+  padding: 12px 16px 10px;
   background: linear-gradient(135deg, #10283f, #0c1e33);
   box-shadow:
     0 12px 40px #02060d21,
@@ -448,7 +448,9 @@ svg {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  width: 100%;
+  max-width: 760px;
+  margin: 10px 0 0;
 }
 .composer-options select {
   background: #07182760;
@@ -461,10 +463,10 @@ svg {
 .composer textarea {
   display: block;
   width: 100%;
-  min-height: 84px;
-  max-height: 240px;
+  min-height: 32px;
+  max-height: 180px;
   padding: 5px 3px;
-  resize: vertical;
+  resize: none;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -1205,5 +1207,196 @@ kbd {
   *::after {
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+.account-settings {
+  flex: 1 1 100%;
+  width: 100%;
+  padding-top: 14px;
+}
+.account-setting-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 10px;
+}
+.account-setting-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #9abed8;
+  font-size: 0.78rem;
+}
+.account-setting-fields select {
+  width: 100%;
+  min-width: 0;
+  font-size: 0.82rem;
+}
+.account-policy {
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: #94acc2;
+  margin: 10px 0;
+}
+.account-policy.full-access {
+  color: #efbf92;
+}
+.account-setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.account-setting-actions button {
+  font-size: 0.78rem;
+  padding: 7px 11px;
+}
+.account-setting-actions small {
+  font-size: 0.72rem;
+}
+.assistant-response {
+  margin-top: 30px;
+}
+.answer-text {
+  color: #e2effb;
+  font-size: 1rem;
+  line-height: 1.75;
+  margin: 14px 0 20px;
+  overflow-wrap: anywhere;
+}
+.answer-text p {
+  margin: 0 0 16px;
+}
+.answer-text ul,
+.answer-text ol {
+  padding-left: 24px;
+  margin: 12px 0 20px;
+}
+.answer-text ul {
+  list-style: disc;
+}
+.answer-text ol {
+  list-style: decimal;
+}
+.answer-text li {
+  margin: 6px 0;
+}
+.answer-text h1,
+.answer-text h2,
+.answer-text h3 {
+  font-weight: 600;
+  line-height: 1.5;
+  margin: 24px 0 12px;
+}
+.answer-text h1 {
+  font-size: 1.5rem;
+}
+.answer-text h2 {
+  font-size: 1.25rem;
+}
+.answer-text h3 {
+  font-size: 1.05rem;
+}
+.answer-text code {
+  font:
+    0.85em 'JetBrains Mono',
+    monospace;
+  background: #69c8ff0b;
+  border-radius: 5px;
+  padding: 2px 5px;
+}
+.answer-text pre {
+  overflow: auto;
+  background: #06111e;
+  padding: 16px;
+  border: 1px solid #69c8ff12;
+  border-radius: 12px;
+}
+.answer-text pre code {
+  background: none;
+  padding: 0;
+}
+.answer-text a {
+  color: #8ed4ff;
+  text-decoration: underline;
+}
+.answer-text blockquote {
+  margin: 16px 0;
+  padding-left: 16px;
+  border-left: 2px solid #69c8ff50;
+  color: #9fbcd2;
+}
+.answer-text table {
+  display: block;
+  overflow: auto;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+.answer-text th,
+.answer-text td {
+  border: 1px solid #69c8ff20;
+  padding: 8px 12px;
+  text-align: left;
+}
+.thinking-panel {
+  background: #69c8ff04;
+  border: 1px solid #69c8ff12;
+  border-radius: 12px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  color: #99b6ce;
+  font-size: 0.85rem;
+}
+.thinking-panel summary {
+  cursor: pointer;
+  color: #a1c9e5;
+}
+.thinking-panel p {
+  white-space: pre-wrap;
+  margin: 12px 0 4px;
+}
+.thinking-panel small {
+  display: block;
+  margin-top: 12px;
+}
+.response-summary {
+  color: #8ba9c2;
+  font-size: 0.75rem;
+  padding: 12px 0;
+  border-top: 1px solid #69c8ff12;
+}
+.response-summary > details {
+  margin-top: 8px;
+}
+.response-summary summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.assignment-row {
+  padding: 12px 0 4px;
+}
+.assignment-row strong {
+  color: #afd9f4;
+  font-weight: 500;
+  display: block;
+}
+.assignment-row > span {
+  display: block;
+  font-size: 0.72rem;
+  margin-top: 3px;
+}
+.assignment-row p {
+  margin: 4px 0;
+}
+.dispatch-status,
+.response-pending {
+  font-size: 0.9rem;
+  color: #94afc6;
+  margin: 16px 0;
+}
+@media (max-width: 750px) {
+  .account-setting-fields {
+    grid-template-columns: 1fr;
   }
 }

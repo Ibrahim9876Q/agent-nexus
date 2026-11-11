@@ -116,10 +116,11 @@ Open **Agents** to see whether real output starts. Check approval requests if a 
 
 ### Command: direct your team
 
-Select the project in the left sidebar. Enter a prompt, select its destination and mode, then click the **↑ Send instruction** button or press **Ctrl + Enter**.
+Select the project in the left sidebar. Enter a prompt, select its destination and mode, then click the **↑ Send instruction** button or press **Enter**. Use **Shift+Enter** for a new line. The composer grows as you type.
 
 | Mode                  | Behavior                                                                                                                                                                                       |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat**              | Default. Sends the message to one coordinator, reuses the conversation, and lets the model delegate when useful. Greetings and questions do not require a coding plan.                         |
 | **Direct / override** | Sends a directive to existing workers in the selected project. Active turns receive steering; idle tasks queue continuation. With no matching workers, Nexus attempts to create a coordinator. |
 | **Plan new work**     | Creates a coordinator planning task under the selected account, or a ready Codex account when using the all-workers destination.                                                               |
 | **Pause project**     | Pauses scheduling and interrupts active turns for the whole selected project.                                                                                                                  |

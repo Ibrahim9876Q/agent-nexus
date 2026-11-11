@@ -130,6 +130,12 @@ export async function createNexusServer(
   app.post('/api/accounts/:id/capacity', async (req, res) =>
     res.json(await engine.refreshCapacity(req.params.id)),
   );
+  app.post('/api/accounts/:id/models', async (req, res) =>
+    res.json(await engine.refreshModels(req.params.id)),
+  );
+  app.post('/api/accounts/:id/settings', async (req, res) =>
+    res.json(await engine.updateSettings(req.params.id, req.body)),
+  );
   app.post('/api/accounts/:id/admission', (req, res) => {
     const v = z.object({ enabled: z.boolean() }).strict().parse(req.body);
     res.json(engine.setAdmission(req.params.id, v.enabled));

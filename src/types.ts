@@ -1,4 +1,27 @@
+export type ModelOption = {
+  id: string;
+  model: string;
+  displayName: string;
+  description?: string;
+  isDefault?: boolean;
+  hidden?: boolean;
+  defaultReasoningEffort?: string;
+  supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
+};
+export type ApprovalMode = 'ask' | 'auto' | 'full';
+export type TokenUsage = {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+};
 export type Account = {
+  model?: string | null;
+  effort?: string | null;
+  approvalMode?: ApprovalMode;
+  models?: ModelOption[];
+  modelsError?: string;
   enabled?: boolean;
   cooldownUntil?: number;
   capacity?: {
@@ -46,8 +69,18 @@ export type Agent = {
   permissions: 'read-only' | 'workspace-write';
   threadId?: string;
   taskId?: string;
+  tokenUsageTotal?: TokenUsage;
 };
 export type Task = {
+  commandId?: string;
+  parentTaskId?: string;
+  execution?: { model?: string; effort?: string; approvalMode: ApprovalMode };
+  responseItems?: { id: string; text: string; phase?: string }[];
+  reasoningSummary?: string;
+  reasoningSummaries?: { id: string; parts: string[] }[];
+  usageByTurn?: Record<string, TokenUsage>;
+  usageBaselines?: Record<string, TokenUsage>;
+  turnIds?: string[];
   activity?: {
     id: string;
     kind: 'command' | 'file' | 'tool';
@@ -114,6 +147,7 @@ export interface Tables {
     at: string;
     targets: string[];
     result: string;
+    taskIds?: string[];
   };
   accounts: Account;
   repos: Repo;

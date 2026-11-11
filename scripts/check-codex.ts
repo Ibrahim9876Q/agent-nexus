@@ -1,6 +1,7 @@
 import { resolve, join } from 'node:path';
 import { CodexConnection } from '../src/providers/codex.ts';
 import { dynamicTools } from '../src/tools.ts';
+import { runtimeSettings } from '../src/runtime-settings.ts';
 const connections = ['a', 'b', 'c'].map(
   (name) => new CodexConnection(resolve('.nexus', 'probe', name)),
 );
@@ -10,11 +11,15 @@ try {
     await c.start();
     const account = await c.request('account/read', { refreshToken: false });
     const models = await c.request('model/list', {});
+    const mode = (['ask', 'auto', 'full'] as const)[i];
+    const controls = runtimeSettings(
+      { approvalMode: mode },
+      { permissions: 'workspace-write' },
+    );
     const thread = await c.request('thread/start', {
       cwd: resolve('.'),
       ephemeral: true,
-      sandbox: 'read-only',
-      approvalPolicy: 'on-request',
+      ...controls,
       config: {
         'agents.enabled': true,
         'agents.max_concurrent_threads_per_session': 1,
@@ -29,6 +34,9 @@ try {
         catalogModels: models.data?.length ?? 0,
         threadCreated: Boolean(thread.thread?.id),
         coordinationToolsAccepted: true,
+        approvalMode: mode,
+        approvalsReviewer: controls.approvalsReviewer,
+        sandbox: controls.sandbox,
         isolatedHome: c.home,
       }),
     );

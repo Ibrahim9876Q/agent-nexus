@@ -22,6 +22,7 @@ test('master directives persist, target a project/account, and do not alter othe
       projectId: p.id,
       accountId: a.id,
       text: 'Focus on tests',
+      mode: 'direct',
     });
     assert.deepEqual(result.targets, [aa.id]);
     assert.match(store.get('tasks', ta.id).prompt, /Focus on tests/);

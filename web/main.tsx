@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type {
   Account,
@@ -12,6 +12,8 @@ import type {
 } from '../src/types';
 import { Brain } from './brain';
 import { AccountCapacity } from './AccountCapacity';
+import { AccountSettings } from './AccountSettings';
+import { ChatResponse } from './ChatResponse';
 import '@fontsource/jetbrains-mono/latin-400.css';
 import '@fontsource/jetbrains-mono/latin-500.css';
 import '@fontsource/jetbrains-mono/latin-600.css';
@@ -111,7 +113,7 @@ function App() {
     [project, setProject] = useState(''),
     [target, setTarget] = useState('all'),
     [prompt, setPrompt] = useState(''),
-    [mode, setMode] = useState('direct'),
+    [mode, setMode] = useState('chat'),
     [error, setError] = useState(''),
     [connected, setConnected] = useState(false),
     [settings, setSettings] = useState(false),
@@ -130,6 +132,14 @@ function App() {
     [shortcuts, setShortcuts] = useState(false),
     [sidebarOpen, setSidebarOpen] = useState(true),
     [busy, setBusy] = useState(false);
+  const composerInput = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const input = composerInput.current;
+    if (input) {
+      input.style.height = 'auto';
+      input.style.height = Math.min(180, input.scrollHeight) + 'px';
+    }
+  }, [prompt, !!s, tab]);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
@@ -217,10 +227,10 @@ function App() {
     return Object.fromEntries(new FormData(e.currentTarget));
   };
   async function send() {
-    if (!prompt.trim() || !project || !ready) return;
+    if (busy || !prompt.trim() || !project || !ready) return;
     setBusy(true);
     try {
-      await act(() =>
+      const result = await act(() =>
         api('/command', {
           projectId: project,
           text: prompt,
@@ -228,7 +238,7 @@ function App() {
           ...(target !== 'all' ? { accountId: target } : {}),
         }),
       );
-      setPrompt('');
+      if (result) setPrompt('');
     } finally {
       setBusy(false);
     }
@@ -475,37 +485,20 @@ function App() {
                   )}
                 </div>
               )}
-              {commands.map((c) => (
+              {commands.map((c, index) => (
                 <div className="exchange" key={c.id}>
                   <div className="chat-author">
-                    YOU{' '}
-                    <span>
-                      {new Date(c.at).toLocaleTimeString()} · {c.mode} ·{' '}
-                      {c.targets.length} workers
-                    </span>
+                    YOU <span>{new Date(c.at).toLocaleTimeString()}</span>
                   </div>
                   <p>{c.text}</p>
-                  <div className="dispatch">
-                    <span>NEXUS / DISPATCH</span>
-                    <pre>{c.result}</pre>
-                  </div>
+                  {!commands
+                    .slice(index + 1)
+                    .some(
+                      (later) =>
+                        c.taskIds?.[0] && later.taskIds?.includes(c.taskIds[0]),
+                    ) && <ChatResponse command={c} state={s} />}
                 </div>
               ))}
-              {commands.length > 0 &&
-                tasks
-                  .filter(
-                    (t) =>
-                      s.agents.find((a) => a.id === t.agentId)?.role ===
-                        'coordinator' && t.output,
-                  )
-                  .map((t) => (
-                    <div className="exchange" key={t.id}>
-                      <div className="chat-author">
-                        COORDINATOR <span>{t.status}</span>
-                      </div>
-                      <pre>{t.output}</pre>
-                    </div>
-                  ))}
             </div>
             <div className="composer">
               {project &&
@@ -522,45 +515,21 @@ function App() {
                   work.
                 </p>
               )}
-              {project && (
-                <div className="composer-options">
-                  <select
-                    aria-label="Command destination"
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                  >
-                    <option value="all">◎ All project workers</option>
-                    {s.accounts
-                      .filter((a) => a.status === 'ready')
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} · {a.provider}
-                        </option>
-                      ))}
-                  </select>
-                  <select
-                    aria-label="Command mode"
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value)}
-                  >
-                    <option value="direct">Direct / override</option>
-                    <option value="plan">Plan new work</option>
-                    <option value="pause">Pause project</option>
-                    <option value="resume">Resume scheduling</option>
-                  </select>
-                </div>
-              )}
               <textarea
+                ref={composerInput}
+                rows={1}
                 aria-label="Master prompt"
                 placeholder={
-                  project
-                    ? 'Direct your team…'
-                    : 'What would you like to build?'
+                  project ? 'How can I help?' : 'What would you like to build?'
                 }
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  if (
+                    e.key === 'Enter' &&
+                    !e.shiftKey &&
+                    !e.nativeEvent.isComposing
+                  ) {
                     e.preventDefault();
                     void send();
                   }
@@ -569,7 +538,7 @@ function App() {
               <div className="composer-bottom">
                 <span>
                   {project
-                    ? 'Ctrl + Enter to send'
+                    ? 'Enter to send · Shift+Enter for a new line'
                     : 'Connect a workspace to send a prompt'}
                 </span>
                 <button
@@ -584,8 +553,38 @@ function App() {
               </div>
             </div>
             {project && (
+              <div className="composer-options">
+                <select
+                  aria-label="Command destination"
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                >
+                  <option value="all">Coordinator / auto team</option>
+                  {s.accounts
+                    .filter((a) => a.status === 'ready')
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} · {a.provider}
+                      </option>
+                    ))}
+                </select>
+                <select
+                  aria-label="Command mode"
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                >
+                  <option value="chat">Chat</option>
+                  <option value="direct">Direct / override</option>
+                  <option value="plan">Plan new work</option>
+                  <option value="pause">Pause project</option>
+                  <option value="resume">Resume scheduling</option>
+                </select>
+              </div>
+            )}
+            {project && (
               <div className="composer-hint">
-                Active agents receive your direction as they work.
+                Chat uses one coordinator. It can bring in other accounts when
+                useful.
               </div>
             )}
           </div>
@@ -723,6 +722,17 @@ function App() {
                   <div className="stream-label">
                     LIVE OUTPUT / {activeTask.status.toUpperCase()}
                   </div>
+                  <details className="thinking-panel">
+                    <summary>Thinking summary & progress</summary>
+                    {activeTask.reasoningSummary && (
+                      <p>{activeTask.reasoningSummary}</p>
+                    )}
+                    {activeTask.responseItems
+                      ?.filter((i) => i.phase === 'commentary')
+                      .map((i) => (
+                        <p key={i.id}>{i.text}</p>
+                      ))}
+                  </details>
                   <pre>
                     {activeTask.output || 'Waiting for runtime output…'}
                   </pre>
@@ -855,6 +865,9 @@ function App() {
                       </button>
                     )}
                   </>
+                )}
+                {a.provider === 'codex' && (
+                  <AccountSettings account={a} onAction={act} />
                 )}
               </div>
             ))}
@@ -1022,7 +1035,7 @@ function App() {
               </button>
             </div>
             <p>
-              <kbd>Ctrl</kbd> + <kbd>Enter</kbd> send master instruction
+              <kbd>Enter</kbd> send · <kbd>Shift + Enter</kbd> new line
             </p>
             <p>
               <kbd>A−</kbd> / <kbd>A＋</kbd> adjust interface text size
