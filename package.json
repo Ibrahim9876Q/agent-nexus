@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --import tsx src/server.ts",
     "build": "tsc --noEmit && vite build",
-    "start": "node --env-file-if-exists=.env --import tsx src/server.ts",
+    "start": "npm run build && electron .",
+    "server": "node --env-file-if-exists=.env --import tsx src/server.ts",
     "test": "tsx --test tests/*.test.ts",
     "format": "prettier --write .",
     "lint": "prettier --check . && tsc --noEmit",

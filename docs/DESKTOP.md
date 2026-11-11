@@ -1,6 +1,6 @@
 # Desktop workspace
 
-Double-click `Launch Nexus.cmd` in the checkout, or run `npm run desktop`.
+After `npm install`, double-click `Launch Nexus.cmd` in the checkout, or run `npm start`. Both build the frontend and open the desktop app. `npm run desktop` is a faster launch when the frontend has already been built.
 The live app starts on an empty Command tab. Connect your real Codex accounts, add a Git repository, and click **Connect workspace & accounts** to open setup. Send your first prompt to start a real coordinator task. Opening a workspace never runs inference by itself.
 
 The packaged Windows application is `release-desktop/Agent Nexus 0.2.0.exe`. Node.js 24.13+ must be installed and on PATH; install the official Codex CLI for real account execution. Native Codex discovery searches PATH and standard Windows installations automatically. You can override it with NEXUS_CODEX_BIN.
