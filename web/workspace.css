@@ -798,15 +798,30 @@ svg {
   border-top: 1px solid var(--line);
   margin: 24px 0;
 }
+.auth-actions {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
 .auth-link {
   display: block;
+  flex: 1 1 220px;
   color: #b1e4ff;
   background: #16466b60;
   border: 1px solid #69c8ff30;
   border-radius: 12px;
   padding: 13px;
-  margin-top: 16px;
   overflow-wrap: anywhere;
+}
+.auth-copy-status {
+  flex-basis: 100%;
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+.auth-copy-status:empty {
+  display: none;
 }
 .capacity {
   display: grid;

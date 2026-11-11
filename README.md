@@ -160,9 +160,9 @@ The environment variable above applies to that terminal and applications launche
 ### Sign in from the app
 
 1. Click **Connect workspace & accounts** on the start screen, or **Workspace & accounts** in the sidebar.
-2. Under **01 / Accounts**, enter a recognizable name such as `Architecture` and click **Add account**.
+2. Under **01 / Accounts**, enter your **Account email** and click **Add account**.
 3. Click **Sign in** for that account.
-4. Click **Open secure ChatGPT sign-in**. Complete the official flow in your system browser using the intended account.
+4. Click **Open secure ChatGPT sign-in**, or use **Copy link** to paste the sign-in address into your preferred browser. Complete the official flow using the intended account.
 5. Return to Nexus and click **Verify**. The account should show `ready`.
 6. Repeat for your second and third accounts, **one sign-in at a time**.
 

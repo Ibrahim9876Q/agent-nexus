@@ -116,6 +116,7 @@ function App() {
     [connected, setConnected] = useState(false),
     [settings, setSettings] = useState(false),
     [auth, setAuth] = useState(''),
+    [copiedAuth, setCopiedAuth] = useState(''),
     [selected, setSelected] = useState(''),
     [repoPath, setRepoPath] = useState(''),
     [fontScale, setFontScale] = useState(() => {
@@ -858,14 +859,36 @@ function App() {
               </div>
             ))}
             {auth && (
-              <a
-                className="auth-link"
-                href={auth}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open secure ChatGPT sign-in ↗
-              </a>
+              <div className="auth-actions">
+                <a
+                  className="auth-link"
+                  href={auth}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open secure ChatGPT sign-in ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setError('');
+                    setCopiedAuth('');
+                    try {
+                      await navigator.clipboard.writeText(auth);
+                      setCopiedAuth(auth);
+                    } catch {
+                      setError(
+                        'Could not copy the sign-in link to your clipboard. Please try again.',
+                      );
+                    }
+                  }}
+                >
+                  Copy link
+                </button>
+                <span className="auth-copy-status" role="status">
+                  {copiedAuth === auth ? 'Link copied' : ''}
+                </span>
+              </div>
             )}
             <form
               onSubmit={(e) => {
@@ -874,7 +897,14 @@ function App() {
                 e.currentTarget.reset();
               }}
             >
-              <input name="name" required placeholder="Account name" />
+              <input
+                name="name"
+                required
+                placeholder="Account email"
+                aria-label="Account email"
+                inputMode="email"
+                autoComplete="email"
+              />
               {s.installation === 'mock' ? (
                 <select name="provider">
                   <option value="mock">Simulation</option>
