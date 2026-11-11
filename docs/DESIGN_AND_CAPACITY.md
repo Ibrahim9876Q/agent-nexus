@@ -1,6 +1,8 @@
 # Terminal workspace and account admission
 
-The terminal workspace uses locally bundled JetBrains Mono, larger default text, teal/ink gradients, slate panels, and sage status accents. A− and A＋ adjust the interface scale. The three tabs remain Command, Brain, and Agents. Live installation still starts empty, with no scripted tasks, invented quota, model usage, or activity.
+The workspace uses black and deep-blue surfaces, a blue/cyan background glow, cyan controls, and a navy-blue composer. Rounded panels and system interface text keep the app readable; locally bundled JetBrains Mono is reserved for code and runtime output. A− and A＋ adjust the interface scale.
+
+Command, Brain, and Agents live only in the sidebar. Its panel button or Ctrl+B opens and closes it. The empty Command screen contains the Nexus mark, “No workspace open,” one workspace/account connection button, and the chat composer. You can draft a prompt before setup; sending requires an open project and a verified account. Existing projects remain available in the sidebar. Live installation still starts empty, with no scripted tasks, invented quota, model usage, or activity.
 
 ## Ideas adapted from TeamClaude
 

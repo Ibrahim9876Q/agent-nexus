@@ -38,6 +38,73 @@ export async function api(path: string, body?: unknown) {
   if (!r.ok) throw new Error(v.error || 'Request failed');
   return v;
 }
+function NexusLogo() {
+  return (
+    <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <path
+        d="M10 29V11l20 18V11M10 20h20"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="11" r="3" fill="currentColor" />
+      <circle cx="30" cy="29" r="3" fill="currentColor" />
+    </svg>
+  );
+}
+function Icon({ name }: { name: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {name === 'panel' && (
+        <>
+          <rect x="3" y="4" width="18" height="16" rx="3" />
+          <path d="M9 4v16" />
+        </>
+      )}
+      {name === 'Command' && (
+        <>
+          <path d="M20 11.5a8 8 0 0 1-8 8H4l1.8-4A8 8 0 1 1 20 11.5Z" />
+          <path d="M8 10h8M8 14h5" />
+        </>
+      )}
+      {name === 'Brain' && (
+        <>
+          <path d="m6 6 12 2-6 10L6 6Zm0 0 0 11 6 1" />
+          <circle cx="6" cy="6" r="2" />
+          <circle cx="18" cy="8" r="2" />
+          <circle cx="12" cy="18" r="2" />
+          <circle cx="6" cy="17" r="1.5" />
+        </>
+      )}
+      {name === 'Agents' && (
+        <>
+          <circle cx="9" cy="8" r="3" />
+          <path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2" />
+        </>
+      )}
+      {name === 'settings' && (
+        <>
+          <path d="M4 7h16M4 17h16" />
+          <circle cx="9" cy="7" r="2" />
+          <circle cx="15" cy="17" r="2" />
+        </>
+      )}
+      {name === 'plus' && <path d="M12 5v14M5 12h14" />}
+      {name === 'send' && <path d="M12 19V5m-6 6 6-6 6 6" />}
+    </svg>
+  );
+}
 function App() {
   const [s, setS] = useState<State>(),
     [tab, setTab] = useState('Command'),
@@ -60,7 +127,22 @@ function App() {
       }
     }),
     [shortcuts, setShortcuts] = useState(false),
+    [sidebarOpen, setSidebarOpen] = useState(true),
     [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setSidebarOpen((v) => !v);
+      }
+      if (e.key === 'Escape') {
+        setSettings(false);
+        setShortcuts(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   useEffect(() => {
     document.documentElement.style.setProperty(
       '--font-scale',
@@ -152,178 +234,194 @@ function App() {
   }
   return (
     <div className={'desktop ' + (window.nexusDesktop ? 'native-window' : '')}>
-      <aside className="ribbon">
-        <span className="mark">N</span>
-        <button title="Command" onClick={() => setTab('Command')}>
-          ⌘
-        </button>
-        <button title="Brain" onClick={() => setTab('Brain')}>
-          ⠿
-        </button>
-        <button title="Agents" onClick={() => setTab('Agents')}>
-          ▤
-        </button>
-        <button
-          className="ribbon-settings"
-          title="Accounts and workspace"
-          onClick={() => setSettings(!settings)}
+      {sidebarOpen && (
+        <aside
+          className="explorer"
+          id="workspace-sidebar"
+          aria-label="Workspace sidebar"
         >
-          ⚙
-        </button>
-      </aside>
-      <aside className="explorer">
-        <div className="workspace-name">
-          <span>
-            <strong>
-              nexus<span className="brand-slash">/</span>
-            </strong>
-            <small>LOCAL WORKSPACE</small>
-          </span>{' '}
-          <button title="Setup" onClick={() => setSettings(!settings)}>
-            ＋
-          </button>
-        </div>
-        <div className="explorer-label">PROJECTS</div>
-        <select
-          aria-label="Project"
-          value={project}
-          onChange={(e) => {
-            setProject(e.target.value);
-            setSelected('');
-          }}
-        >
-          <option value="">Select a project</option>
-          {s.projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <div className="file-tree">
-          <div>⌄ &nbsp; github workspace</div>
-          {s.repos
-            .filter((r) =>
-              s.projects.some((p) => p.id === project && p.repoId === r.id),
-            )
-            .map((r) => (
-              <span key={r.id}>◇ &nbsp; {r.name}</span>
-            ))}
-          <div>
-            ⌄ &nbsp; connected accounts <small>{s.accounts.length}</small>
-          </div>
-          {s.accounts.map((a) => (
-            <div className="sidebar-account" key={a.id}>
-              <button
-                key={a.id}
-                onClick={() => {
-                  setTarget(a.id);
-                  setTab('Agents');
-                }}
-              >
-                <i className={a.status === 'ready' ? 'ready' : ''} />
-                {a.name}
-                <small>{a.provider}</small>
-              </button>
-              <AccountCapacity account={a} compact />
+          <div className="workspace-name">
+            <div className="brand">
+              <NexusLogo />
+              <strong>Nexus</strong>
             </div>
-          ))}
-          <button className="add-account" onClick={() => setSettings(true)}>
-            ＋ Connect account
-          </button>
-        </div>
-        <div className="explorer-label">TASKS / {tasks.length}</div>
-        <div className="task-tree">
-          {tasks.map((t) => (
             <button
-              key={t.id}
-              className={activeTask?.id === t.id ? 'chosen' : ''}
-              onClick={() => {
-                setSelected(t.agentId);
-                setTab('Agents');
-              }}
+              className="icon-button"
+              aria-label="Close sidebar"
+              aria-expanded={true}
+              aria-controls="workspace-sidebar"
+              title="Close sidebar (Ctrl+B)"
+              onClick={() => setSidebarOpen(false)}
             >
-              <span className={t.status}>●</span>
-              {t.title}
+              <Icon name="panel" />
             </button>
-          ))}
-        </div>
-        <div className="explorer-bottom">
-          <span className="terminal-connected">●</span> LOCAL ENGINE
-          <br />
-          <span>
-            {s.accounts.length} accounts / {s.repos.length} repositories
-          </span>
-        </div>
-      </aside>
+          </div>
+          <nav className="side-nav" aria-label="Main navigation">
+            {['Command', 'Brain', 'Agents'].map((name) => (
+              <button
+                key={name}
+                aria-current={tab === name ? 'page' : undefined}
+                className={tab === name ? 'selected' : ''}
+                onClick={() => setTab(name)}
+              >
+                <Icon name={name} />
+                <span>{name}</span>
+                {name === 'Agents' && agents.length > 0 && (
+                  <small>{agents.length}</small>
+                )}
+              </button>
+            ))}
+          </nav>
+          <div className="sidebar-scroll">
+            {s.projects.length > 0 && (
+              <>
+                <div className="explorer-label">Workspace</div>
+                <select
+                  aria-label="Project"
+                  value={project}
+                  onChange={(e) => {
+                    setProject(e.target.value);
+                    setSelected('');
+                    setTarget('all');
+                  }}
+                >
+                  <option value="">No workspace open</option>
+                  {s.projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            {s.accounts.length > 0 && (
+              <>
+                <div className="explorer-label">
+                  Accounts <small>{s.accounts.length}</small>
+                </div>
+                <div className="file-tree">
+                  {s.accounts.map((a) => (
+                    <div className="sidebar-account" key={a.id}>
+                      <button
+                        onClick={() => {
+                          setTarget(a.id);
+                          setTab('Agents');
+                        }}
+                      >
+                        <i className={a.status === 'ready' ? 'ready' : ''} />
+                        {a.name}
+                        <small>{a.provider}</small>
+                      </button>
+                      <AccountCapacity account={a} compact />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {tasks.length > 0 && (
+              <>
+                <div className="explorer-label">
+                  Tasks <small>{tasks.length}</small>
+                </div>
+                <div className="task-tree">
+                  {tasks.map((t) => (
+                    <button
+                      key={t.id}
+                      className={activeTask?.id === t.id ? 'chosen' : ''}
+                      onClick={() => {
+                        setSelected(t.agentId);
+                        setTab('Agents');
+                      }}
+                    >
+                      <span className={t.status}>●</span>
+                      {t.title}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="sidebar-bottom">
+            <button
+              className="workspace-settings"
+              onClick={() => setSettings(true)}
+            >
+              <Icon name="settings" /> Workspace & accounts
+            </button>
+            <div className="sidebar-tools">
+              <span
+                className="engine-state"
+                title={
+                  connected
+                    ? 'Local engine connected'
+                    : 'Reconnecting to local engine'
+                }
+              >
+                <i className={connected ? 'ready' : ''} />
+                {connected ? 'Local engine' : 'Reconnecting…'}
+              </span>
+              <button
+                aria-label="Decrease text size"
+                onClick={() =>
+                  setFontScale((v) => Math.max(0.9, +(v - 0.1).toFixed(1)))
+                }
+              >
+                A−
+              </button>
+              <button
+                aria-label="Increase text size"
+                onClick={() =>
+                  setFontScale((v) => Math.min(1.3, +(v + 0.1).toFixed(1)))
+                }
+              >
+                A+
+              </button>
+              <button
+                aria-label="Keyboard shortcuts"
+                onClick={() => setShortcuts(true)}
+              >
+                ?
+              </button>
+            </div>
+          </div>
+        </aside>
+      )}
       <section className="surface">
+        <header className="window-bar">
+          {!sidebarOpen && (
+            <button
+              className="icon-button"
+              aria-label="Open sidebar"
+              aria-expanded={false}
+              aria-controls="workspace-sidebar"
+              title="Open sidebar (Ctrl+B)"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Icon name="panel" />
+            </button>
+          )}
+          <span>
+            {project
+              ? s.projects.find((p) => p.id === project)?.name
+              : tab === 'Command'
+                ? ''
+                : tab}
+          </span>
+          {project && (
+            <button
+              className="icon-button header-settings"
+              aria-label="Workspace and accounts"
+              onClick={() => setSettings(true)}
+            >
+              <Icon name="settings" />
+            </button>
+          )}
+        </header>
         {s.installation === 'mock' && (
           <div className="mock-banner">
             MOCK INSTALLATION · Scripted workers only · Separate test data
           </div>
         )}
-        <div className="tabbar">
-          {['Command', 'Brain', 'Agents'].map((name, i) => (
-            <button
-              key={name}
-              className={tab === name ? 'selected' : ''}
-              onClick={() => setTab(name)}
-            >
-              <span>{['⌘', '⠿', '▤'][i]}</span>
-              {name}
-              <small>0{i + 1}</small>
-            </button>
-          ))}
-          <div className="tabbar-end">
-            <button
-              aria-label="Decrease text size"
-              onClick={() =>
-                setFontScale((v) => Math.max(0.9, +(v - 0.1).toFixed(1)))
-              }
-            >
-              A−
-            </button>
-            <button
-              aria-label="Increase text size"
-              onClick={() =>
-                setFontScale((v) => Math.min(1.3, +(v + 0.1).toFixed(1)))
-              }
-            >
-              A＋
-            </button>
-            <button
-              aria-label="Keyboard shortcuts"
-              onClick={() => setShortcuts(true)}
-            >
-              ?
-            </button>
-          </div>
-        </div>
-        <div className="breadcrumb">
-          workspace /{' '}
-          {s.projects.find((p) => p.id === project)?.name || 'getting started'}{' '}
-          / <span>{tab.toLowerCase()}</span>
-          <span className="connection">
-            <i className={connected ? 'ready' : ''} />
-            {connected ? 'local engine connected' : 'reconnecting'}
-          </span>
-        </div>
-        <div className="session-strip">
-          <span>
-            <span className="terminal-caret">›</span>{' '}
-            {project
-              ? s.projects.find((p) => p.id === project)?.name
-              : 'no workspace selected'}
-          </span>
-          <span>
-            {tasks.filter((t) => t.status === 'running').length} running{' '}
-            <em>/</em> {tasks.filter((t) => t.status === 'completed').length}{' '}
-            done
-          </span>
-          <button onClick={() => setSettings(true)}>
-            accounts [{s.accounts.filter((a) => a.status === 'ready').length}/
-            {s.accounts.length}]
-          </button>
-        </div>
         {error && (
           <div className="error">
             {error}
@@ -356,81 +454,22 @@ function App() {
             </div>
           ))}
         {tab === 'Command' && (
-          <div className="command-view">
+          <div className={'command-view' + (!commands.length ? ' empty' : '')}>
             <div className="chat-scroll">
               {!commands.length && (
                 <div className="welcome">
-                  <div className="terminal-symbol">
-                    nexus<span>_</span>
+                  <div className="welcome-logo">
+                    <NexusLogo />
                   </div>
-                  <span>
-                    {project ? 'COMMAND CENTER' : 'NO WORKSPACE OPEN'}
-                  </span>
                   <h1>
-                    {project
-                      ? 'Ready for your next instruction.'
-                      : 'Your terminal. Your team.'}
+                    {project ? 'What are we building?' : 'No workspace open'}
                   </h1>
-                  <p>
-                    {project
-                      ? 'Your first prompt starts the coordinator. Tasks, messages, and contributions appear as your agents work.'
-                      : 'Connect your accounts. Open a Git workspace. Send the first instruction.'}
-                  </p>
-                  {!project && (
-                    <div className="startup-checks">
-                      <div>
-                        <span
-                          className={connected ? 'check-ok' : 'check-pending'}
-                        >
-                          {connected ? '[ok]' : '[..]'}
-                        </span>
-                        local engine{' '}
-                        <small>{connected ? 'connected' : 'connecting'}</small>
-                      </div>
-                      <div>
-                        <span className={ready ? 'check-ok' : 'check-pending'}>
-                          {ready ? '[ok]' : '[  ]'}
-                        </span>
-                        Codex accounts{' '}
-                        <small>
-                          {
-                            s.accounts.filter((a) => a.status === 'ready')
-                              .length
-                          }{' '}
-                          ready
-                        </small>
-                      </div>
-                      <div>
-                        <span className="check-pending">[ ]</span>project
-                        workspace <small>awaiting selection</small>
-                      </div>
-                    </div>
-                  )}
-                  {project && (
-                    <div className="quick-prompts">
-                      {[
-                        'Inspect the repository and plan the next milestone.',
-                        'Review the current work and identify blockers.',
-                        'Coordinate implementation and independent tests.',
-                      ].map((p) => (
-                        <button
-                          key={p}
-                          onClick={() => {
-                            setPrompt(p);
-                            setMode('plan');
-                          }}
-                        >
-                          {p} ↗
-                        </button>
-                      ))}
-                    </div>
-                  )}
                   {!project && (
                     <button
-                      className="accent"
+                      className="connect-button"
                       onClick={() => setSettings(true)}
                     >
-                      Connect accounts & open workspace →
+                      <Icon name="plus" /> Connect workspace & accounts
                     </button>
                   )}
                 </div>
@@ -482,39 +521,40 @@ function App() {
                   work.
                 </p>
               )}
-              <div className="composer-options">
-                <select
-                  aria-label="Command destination"
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                >
-                  <option value="all">◎ All project workers</option>
-                  {s.accounts
-                    .filter((a) => a.status === 'ready')
-                    .map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} · {a.provider}
-                      </option>
-                    ))}
-                </select>
-                <select
-                  aria-label="Command mode"
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value)}
-                >
-                  <option value="direct">Direct / override</option>
-                  <option value="plan">Plan new work</option>
-                  <option value="pause">Pause project</option>
-                  <option value="resume">Resume scheduling</option>
-                </select>
-              </div>
+              {project && (
+                <div className="composer-options">
+                  <select
+                    aria-label="Command destination"
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                  >
+                    <option value="all">◎ All project workers</option>
+                    {s.accounts
+                      .filter((a) => a.status === 'ready')
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} · {a.provider}
+                        </option>
+                      ))}
+                  </select>
+                  <select
+                    aria-label="Command mode"
+                    value={mode}
+                    onChange={(e) => setMode(e.target.value)}
+                  >
+                    <option value="direct">Direct / override</option>
+                    <option value="plan">Plan new work</option>
+                    <option value="pause">Pause project</option>
+                    <option value="resume">Resume scheduling</option>
+                  </select>
+                </div>
+              )}
               <textarea
-                disabled={!project || !ready}
                 aria-label="Master prompt"
                 placeholder={
                   project
                     ? 'Direct your team…'
-                    : 'Create a project in workspace setup to begin…'
+                    : 'What would you like to build?'
                 }
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -527,24 +567,26 @@ function App() {
               />
               <div className="composer-bottom">
                 <span>
-                  <span className="terminal-caret">›</span>{' '}
-                  {project ? 'instruction' : 'waiting for workspace'}{' '}
-                  <span className="composer-key">Ctrl ↵</span>
+                  {project
+                    ? 'Ctrl + Enter to send'
+                    : 'Connect a workspace to send a prompt'}
                 </span>
                 <button
-                  className="accent"
+                  className="accent send-button"
+                  aria-label="Send instruction"
+                  title="Send instruction (Ctrl+Enter)"
                   disabled={busy || !project || !ready || !prompt.trim()}
                   onClick={() => void send()}
                 >
-                  Send ↵
+                  <Icon name="send" />
                 </button>
               </div>
             </div>
-            <div className="composer-hint">
-              <button onClick={() => setShortcuts(true)}>?</button> for
-              shortcuts <span>·</span> Active turns accept steering; idle
-              workers queue.
-            </div>
+            {project && (
+              <div className="composer-hint">
+                Active agents receive your direction as they work.
+              </div>
+            )}
           </div>
         )}
         {tab === 'Brain' && (
@@ -713,33 +755,23 @@ function App() {
             )}
           </div>
         )}
-        <footer>
-          <span>
-            <i className={connected ? 'ready' : ''} />{' '}
-            {connected ? 'engine online' : 'offline'}
-          </span>
-          <span>
-            {s.accounts.filter((a) => a.status === 'ready').length} accounts
-            ready
-          </span>
-          <span>
-            {tasks.filter((t) => t.status === 'running').length} running
-          </span>
-          <span className="status-branch">
-            ⑂ {activeTask?.branch || 'no branch selected'}
-          </span>
-          <span className="footer-right">
-            {tab.toLowerCase()} <span className="status-separator">/</span>{' '}
-            nexus
-          </span>
-        </footer>
       </section>
       {settings && (
         <div className="setup-backdrop">
-          <div className="setup">
+          <div
+            className="setup"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="setup-heading"
+          >
             <div className="setup-title">
-              <h2>Workspace setup</h2>
-              <button onClick={() => setSettings(false)}>×</button>
+              <h2 id="setup-heading">Workspace & accounts</h2>
+              <button
+                aria-label="Close workspace setup"
+                onClick={() => setSettings(false)}
+              >
+                ×
+              </button>
             </div>
             {error && (
               <div className="error" role="alert">
@@ -959,10 +991,13 @@ function App() {
               <kbd>Ctrl</kbd> + <kbd>Enter</kbd> send master instruction
             </p>
             <p>
-              <kbd>A−</kbd> / <kbd>A＋</kbd> adjust terminal text size
+              <kbd>A−</kbd> / <kbd>A＋</kbd> adjust interface text size
             </p>
             <p>
               <kbd>Scroll</kbd> zoom the Brain · drag empty canvas to pan
+            </p>
+            <p>
+              <kbd>Ctrl</kbd> + <kbd>B</kbd> open or close the sidebar
             </p>
             <p>Click an agent node to inspect ownership and open its stream.</p>
           </div>

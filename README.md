@@ -12,7 +12,7 @@ Built with Electron, React, TypeScript, SQLite, and the official Codex app-serve
 
 ## The workspace
 
-The terminal interface includes bundled JetBrains Mono, adjustable text size, compact runtime command/edit/tool rows, and account capacity monitoring. Account setup offers **Drain account**, **Enable new work**, and **Refresh capacity**. Draining lets active work finish while holding new tasks. Quota is reported by Codex; unavailable values remain unknown. See [design and capacity notes](docs/DESIGN_AND_CAPACITY.md) for the TeamClaude-inspired improvements.
+The rounded blue-and-black interface opens with a simple chat composer. Command, Brain, and Agents are in a collapsible sidebar; use its panel button or **Ctrl+B** to toggle it. Interface text size is adjustable, and code/output uses bundled JetBrains Mono. Worker activity and account capacity remain visible while you work. Account setup offers **Drain account**, **Enable new work**, and **Refresh capacity**. Draining lets active work finish while holding new tasks. Quota is reported by Codex; unavailable values remain unknown. See [design and capacity notes](docs/DESIGN_AND_CAPACITY.md) for the TeamClaude-inspired improvements.
 
 | Tab              | What you do there                                                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -20,7 +20,7 @@ The terminal interface includes bundled JetBrains Mono, adjustable text size, co
 | **02 / Brain**   | Explore a graph of repositories, accounts, agents, tasks, dependencies, messages, branches, and file changes. Click nodes to inspect their connections. |
 | **03 / Agents**  | Inspect each worker's assignment, status, branch, worktree, streamed output, and messages. Interrupt or resume individual tasks.                        |
 
-The gear button opens **Workspace setup**, where you add accounts, local repositories, and projects. You can start with one account and add two, three, or more; configured concurrency limits still apply.
+**Connect workspace & accounts** on the start screen, or **Workspace & accounts** in the sidebar, opens setup, where you add accounts, local repositories, and projects. You can start with one account and add two, three, or more; configured concurrency limits still apply.
 
 ## Quick start on a Windows laptop
 
@@ -83,7 +83,7 @@ You can also double-click **Launch Nexus.cmd** in the checkout after dependencie
 
 `npm.cmd run desktop` opens the live application. It contains no sample accounts, greeting project, scripted tasks, or prefilled chat. The simulation endpoint and mock accounts are disabled in this mode.
 
-1. Open the gear and connect your real Codex accounts as described below.
+1. Click **Connect workspace & accounts** and connect your real Codex accounts as described below.
 2. Add a local Git repository and open its project workspace.
 3. Send your first prompt in **Command**. Opening a project does not start any AI work by itself.
 4. Follow actual runtime output in **Agents** and contributions in **Brain**.
@@ -100,8 +100,8 @@ npm.cmd run mock:desktop
 
 This opens a separate app instance with a **MOCK INSTALLATION** banner and its own database.
 
-1. Launch the mock installation above and click the **gear** in the lower-left ribbon.
-2. Click **Run three-account simulation** at the bottom of Workspace setup.
+1. Launch the mock installation above and click **Workspace & accounts** in the sidebar.
+2. Click **Run three-account simulation** at the bottom of the setup panel.
 3. The generated project becomes selected. Open **Agents** to follow its tasks.
 4. Open **Brain** to inspect account ownership, delegated workers, dependencies, worktree branches, and changed files.
 5. Click a worker node and choose **Open worker stream** to inspect its output.
@@ -159,8 +159,8 @@ The environment variable above applies to that terminal and applications launche
 
 ### Sign in from the app
 
-1. Open the **gear → Workspace setup**.
-2. Under **01 / Accounts**, enter a recognizable name such as `Architecture`, select **Codex / ChatGPT**, and click **Add account**.
+1. Click **Connect workspace & accounts** on the start screen, or **Workspace & accounts** in the sidebar.
+2. Under **01 / Accounts**, enter a recognizable name such as `Architecture` and click **Add account**.
 3. Click **Sign in** for that account.
 4. Click **Open secure ChatGPT sign-in**. Complete the official flow in your system browser using the intended account.
 5. Return to Nexus and click **Verify**. The account should show `ready`.
@@ -192,7 +192,7 @@ git config user.email "your-email@example.com"
 git commit -m "Initial test repository"
 ```
 
-In Nexus, open **Workspace setup**:
+In Nexus, open **Workspace & accounts** from the sidebar:
 
 1. Under **02 / Repository**, enter a name and the full local path, such as `C:\Users\YourName\Documents\nexus-test-project`. Click **Add local repo**.
 2. Under **03 / Project**, enter a project name, select that repository and a verified coordinator account, and enter an objective.
@@ -215,7 +215,7 @@ Open **Agents** to see whether real output starts. Check approval requests if a 
 
 ### Command: direct your team
 
-Select the project in the left sidebar. Enter a prompt, select its destination and mode, then click **Send directive** or press **Ctrl + Enter**.
+Select the project in the left sidebar. Enter a prompt, select its destination and mode, then click the **↑ Send instruction** button or press **Ctrl + Enter**.
 
 | Mode                  | Behavior                                                                                                                                                                                       |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -61,14 +61,14 @@ else {
         height: 960,
         minWidth: 900,
         minHeight: 640,
-        backgroundColor: '#071b23',
+        backgroundColor: '#070d16',
         ...(process.platform === 'win32'
           ? {
               titleBarStyle: 'hidden',
               titleBarOverlay: {
-                color: '#193d45',
-                symbolColor: '#d0e4d6',
-                height: 44,
+                color: '#070d16',
+                symbolColor: '#c1ddf3',
+                height: 52,
               },
             }
           : {}),

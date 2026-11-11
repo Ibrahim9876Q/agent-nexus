@@ -1,11 +1,11 @@
 # Desktop workspace
 
 Double-click `Launch Nexus.cmd` in the checkout, or run `npm run desktop`.
-The live app starts on an empty Command tab. Connect your real Codex accounts, add a Git repository, and open a workspace through the gear. Send your first prompt to start a real coordinator task. Opening a workspace never runs inference by itself.
+The live app starts on an empty Command tab. Connect your real Codex accounts, add a Git repository, and click **Connect workspace & accounts** to open setup. Send your first prompt to start a real coordinator task. Opening a workspace never runs inference by itself.
 
 The packaged Windows application is `release-desktop/Agent Nexus 0.2.0.exe`. Node.js 24.13+ must be installed and on PATH; install the official Codex CLI for real account execution. Native Codex discovery searches PATH and standard Windows installations automatically. You can override it with NEXUS_CODEX_BIN.
 
-The three tabs are Command, Brain and Agents. Brain shows project records and Git-observed contributions, including delegation and dependencies. Agents shows real runtime output, errors and messages. Account readiness is refreshed on restart, but completed or interrupted work is not silently rerun.
+Command, Brain and Agents are in the sidebar. Use its panel button or Ctrl+B to open and close it. Brain shows project records and Git-observed contributions, including delegation and dependencies. Agents shows real runtime output, errors and messages. Account readiness is refreshed on restart, but completed or interrupted work is not silently rerun.
 
 Sign-in begins inside the app and completes in the official system-browser flow. Use Sign in, follow the secure link, then Verify. Sign into accounts sequentially. Ready status means authentication exists; a completed task establishes actual inference access. Credentials are isolated per account and never copied from another application.
 
