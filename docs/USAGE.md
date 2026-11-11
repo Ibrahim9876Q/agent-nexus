@@ -91,31 +91,11 @@ Nexus does not copy this machine's existing ChatGPT desktop login or your other 
 
 ## Create your first real project
 
-Use a small test repository for your first run. Nexus needs a local Git repository with at least one commit and a configured Git commit identity.
-
-For example, from PowerShell:
-
-```powershell
-cd "$env:USERPROFILE\Documents"
-mkdir nexus-test-project
-cd nexus-test-project
-git init -b main
-'# Nexus test project' | Set-Content README.md
-git add README.md
-git commit -m "Initial test repository"
-```
-
-If Git asks who you are, set your identity **inside this test repository**, using your own name and email, then retry the commit:
-
-```powershell
-git config user.name "Your Name"
-git config user.email "your-email@example.com"
-git commit -m "Initial test repository"
-```
+Create a new empty folder on your Desktop or elsewhere, or choose an existing Git repository. Nexus automatically initializes empty folders and creates the first commit when you add them. If no Git identity is configured, it sets an Agent Nexus identity only inside that new repository. Existing folders containing project files need an initial Git commit before import.
 
 In Nexus, open **Workspace & accounts** from the sidebar:
 
-1. Under **02 / Repository**, enter a name and the full local path, such as `C:\Users\YourName\Documents\nexus-test-project`. Click **Add local repo**.
+1. Under **02 / Project folder**, enter a name and click **Browse…** to choose your folder (or enter its full path). Click **Add folder**.
 2. Under **03 / Project**, enter a project name, select that repository and a verified coordinator account, and enter an objective.
 3. Click **Open project workspace**. The workspace stays idle until you send a prompt from Command.
 

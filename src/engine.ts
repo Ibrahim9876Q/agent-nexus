@@ -322,7 +322,8 @@ export class Engine {
     return record;
   }
   async addRepo(path: string, name: string) {
-    const canonical = await this.git.validate(path);
+    const parsedName = short.parse(name);
+    const canonical = await this.git.prepare(path);
     const existing = this.store
       .all('repos')
       .find((r) => r.path.toLowerCase() === canonical.toLowerCase());
@@ -330,7 +331,7 @@ export class Engine {
       existing ??
       this.store.put('repos', {
         id: id(),
-        name: short.parse(name),
+        name: parsedName,
         path: canonical,
       })
     );

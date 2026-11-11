@@ -10,6 +10,7 @@ import { CodexConnection } from '../src/providers/codex.ts';
 import { runtimeConfig } from '../src/runtime-mode.ts';
 import { resolveCodex } from '../src/providers/resolve-codex.ts';
 import { createNexusServer } from '../src/server.ts';
+import { git } from '../src/integrations/git.ts';
 const delay = () => new Promise((r) => setTimeout(r, 20));
 test('live and mock installations have separate default locations', () => {
   const live = runtimeConfig({}, tmpdir()),
@@ -57,17 +58,25 @@ test('live server starts empty and refuses simulation and mock accounts', async 
       400,
     );
     assert.equal(app.store.all('accounts').length, 0);
-    const repo = app.store.put('repos', { id: id(), name: 'test', path: root }),
-      account = app.store.put('accounts', {
-        id: id(),
-        name: 'Real',
-        provider: 'codex',
-        status: 'ready',
-        concurrency: 2,
-        nativeLimit: 0,
-        maxDepth: 3,
-        maxAgents: 12,
-      });
+    const folder = await mkdtemp(join(tmpdir(), 'nexus-empty-project-'));
+    const added = await fetch(base + '/api/repos', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'New project', path: folder }),
+    });
+    assert.equal(added.status, 200);
+    const repo = await added.json();
+    assert.equal(await git(folder, 'rev-list', '--count', 'HEAD'), '1');
+    const account = app.store.put('accounts', {
+      id: id(),
+      name: 'Real',
+      provider: 'codex',
+      status: 'ready',
+      concurrency: 2,
+      nativeLimit: 0,
+      maxDepth: 3,
+      maxAgents: 12,
+    });
     const opened = await fetch(base + '/api/projects', {
       method: 'POST',
       headers,

@@ -914,14 +914,18 @@ function App() {
               )}
               <button>Add account</button>
             </form>
-            <h3>02 / Repository</h3>
+            <h3>02 / Project folder</h3>
+            <p>
+              Choose an existing Git repository or a new empty folder. Nexus
+              automatically sets up Git and the first commit for empty folders.
+            </p>
             <form
               onSubmit={(e) => {
                 const v = form(e);
                 void act(() => api('/repos', v));
               }}
             >
-              <input name="name" required placeholder="Repository name" />
+              <input name="name" required placeholder="Folder name" />
               <input
                 name="path"
                 required
@@ -943,7 +947,7 @@ function App() {
                   Browse…
                 </button>
               )}
-              <button>Add local repo</button>
+              <button>Add folder</button>
             </form>
             <h3>03 / Project</h3>
             <form

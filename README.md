@@ -27,7 +27,7 @@ npm install -g @openai/codex
 
 1. In Nexus, click **Connect workspace & accounts**.
 2. Enter an **Account email**, click **Add account**, then **Sign in**. Open or copy the secure sign-in link, finish signing in, and click **Verify**. Repeat for your other accounts.
-3. Add a local Git repository with at least one commit, then create and open its project workspace.
+3. Under **Project folder**, choose an existing Git repository or a new empty folder and click **Add folder**. Nexus sets up Git and the first commit for empty folders automatically. Then create and open its project workspace.
 4. Type your prompt in **Command** and send it. Use **Brain** to see connections and **Agents** to follow individual workers. Toggle the sidebar with **Ctrl+B**.
 
 The app starts empty. Opening a workspace does not start AI work until you send a prompt. Account sign-in happens through the official browser flow.

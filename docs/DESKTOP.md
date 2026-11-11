@@ -9,6 +9,8 @@ Command, Brain and Agents are in the sidebar. Use its panel button or Ctrl+B to 
 
 Sign-in begins inside the app and completes in the official system-browser flow. Use Sign in, follow the secure link, then Verify. Sign into accounts sequentially. Ready status means authentication exists; a completed task establishes actual inference access. Credentials are isolated per account and never copied from another application.
 
+Adding a new empty project folder initializes Git on `main` and creates an empty initial commit automatically. Empty Git repositories without commits are also prepared, preserving their branch. Existing repositories with commits are left unchanged. Folders with existing files need their own initial Git commit before import. If no Git identity is configured, new empty repositories receive a repository-local `Agent Nexus <agent-nexus@localhost>` identity; global Git configuration is never changed. Preparation happens only when you add the chosen folder in Nexus.
+
 Directives to active workers use steering. Directives sent during startup are queued. Idle tasks receive continuation. Pause/resume modes affect project scheduling; interrupted tasks require explicit Resume in Agents. Approval gates remain active.
 
 Live source data is `.nexus/live/`; packaged live data is `workspace-live/` under the OS application-data directory. Existing legacy demo data is preserved in its old location and is not loaded. The renderer has no Node integration and uses a loopback-only backend; the repository folder picker exposes only a narrow desktop IPC method.

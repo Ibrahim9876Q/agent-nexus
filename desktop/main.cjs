@@ -115,7 +115,7 @@ else {
           throw new Error('Untrusted window');
         const result = await dialog.showOpenDialog(window, {
           properties: ['openDirectory'],
-          title: 'Open a Git repository',
+          title: 'Choose a project folder',
         });
         return result.canceled ? null : result.filePaths[0];
       });
