@@ -1,0 +1,7 @@
+{
+  "name": "agent-nexus-desktop",
+  "version": "0.2.0",
+  "main": "main.cjs",
+  "description": "Local multi-account agent workspace",
+  "author": "Agent Nexus contributors"
+}

@@ -1,5 +1,7 @@
 # Agent Nexus
 
+**Desktop workspace:** double-click `Launch Nexus.cmd`, or run `npm run desktop`. A portable Windows executable is built with `npm run desktop:build` into `release-desktop/Agent Nexus 0.2.0.exe`. The app opens **Command**, then **Brain**, then **Agents**, in a dark terminal-style workspace. See [desktop setup and controls](docs/DESKTOP.md). Account sign-in starts inside workspace setup and completes in the official system-browser flow. Node.js 24+ is required for both launch methods.
+
 A local-first development orchestrator for independently authenticated Codex accounts. Coordinate workers, let them request their own delegated workers, and inspect tasks, messages, approvals, and isolated Git worktrees in a live React dashboard.
 
 **Status: functional local MVP.** The mock end-to-end workflow is tested. The real Codex adapter initializes three isolated processes and creates threads with coordination tools against Codex `0.167.0-alpha.3.2`. Authenticated inference, native subagent execution, and remote PR publishing still require integration validation with your accounts. A successful model catalog response is not an entitlement check.

@@ -14,9 +14,12 @@
     "format": "prettier --write .",
     "lint": "prettier --check . && tsc --noEmit",
     "demo": "tsx scripts/demo.ts",
-    "check:codex": "tsx scripts/check-codex.ts"
+    "check:codex": "tsx scripts/check-codex.ts",
+    "desktop": "electron .",
+    "desktop:build": "npm run build && node scripts/prepare-desktop.cjs && electron-builder --win portable"
   },
   "dependencies": {
+    "d3-force": "^3.0.1",
     "express": "^5.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -25,16 +28,47 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",
+    "@types/d3-force": "^3.0.10",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.3.0",
+    "electron-builder": "^26.18.0",
     "prettier": "^3.9.10",
     "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
-  }
+  },
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "local.agentnexus.desktop",
+    "productName": "Agent Nexus",
+    "directories": {
+      "output": "release-desktop",
+      "app": "desktop"
+    },
+    "files": [
+      "main.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".nexus/desktop-runtime",
+        "to": "app-runtime",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "asar": true
+  },
+  "description": "Local multi-account agent workspace",
+  "author": "Agent Nexus contributors"
 }

@@ -80,6 +80,15 @@ export type Approval = {
 };
 export type Event = { id: string; at: string; type: string; data: unknown };
 export interface Tables {
+  commands: {
+    id: string;
+    projectId: string;
+    text: string;
+    mode: string;
+    at: string;
+    targets: string[];
+    result: string;
+  };
   accounts: Account;
   repos: Repo;
   projects: Project;

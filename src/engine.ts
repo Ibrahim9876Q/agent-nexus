@@ -109,6 +109,110 @@ export class Engine {
     );
     return c.request('account/login/start', { type: 'chatgpt' });
   }
+  async command(input: unknown) {
+    const v = z
+      .object({
+        projectId: z.string().uuid(),
+        text: text,
+        mode: z.enum(['direct', 'plan', 'pause', 'resume']).default('direct'),
+        accountId: z.string().uuid().optional(),
+      })
+      .strict()
+      .parse(input);
+    const project = this.store.get('projects', v.projectId);
+    if (v.accountId) this.store.get('accounts', v.accountId);
+    const targets = this.store
+      .all('agents')
+      .filter(
+        (a) =>
+          a.projectId === project.id &&
+          a.status !== 'retired' &&
+          (!v.accountId || a.accountId === v.accountId),
+      );
+    const record = {
+      id: id(),
+      projectId: project.id,
+      text: v.text,
+      mode: v.mode,
+      at: new Date().toISOString(),
+      targets: targets.map((a) => a.id),
+      result: 'Dispatching',
+    };
+    this.store.put('commands', record);
+    try {
+      if (v.mode === 'pause' || v.mode === 'resume') {
+        await this.pause(project.id, v.mode === 'pause');
+        record.result =
+          v.mode === 'pause'
+            ? 'Project paused; active turns interrupted.'
+            : 'Scheduling resumed. Interrupted tasks require explicit resume.';
+      } else if (v.mode === 'plan' || !targets.length) {
+        const account = v.accountId
+          ? this.store.get('accounts', v.accountId)
+          : this.store
+              .all('accounts')
+              .find((a) => a.provider === 'codex' && a.status === 'ready');
+        if (!account)
+          throw new Error(
+            'Connect and select a ready coordinator account first.',
+          );
+        const agent = this.addAgent(
+          account.id,
+          project.id,
+          'coordinator',
+          undefined,
+          'read-only',
+        );
+        this.addTask(
+          agent.id,
+          'Master prompt',
+          `Inspect this repository and use nexus_plan to schedule a bounded plan with independent review. Objective: ${v.text}`,
+        );
+        record.targets = [agent.id];
+        record.result =
+          'Coordinator task queued. Its output appears below and in Agents.';
+      } else {
+        const results: string[] = [];
+        for (const a of targets) {
+          if (!a.taskId) continue;
+          const task = this.store.get('tasks', a.taskId);
+          const active = this.active.get(task.id);
+          try {
+            if (active?.connection && active.turnId && a.threadId) {
+              await active.connection.request('turn/steer', {
+                threadId: a.threadId,
+                expectedTurnId: active.turnId,
+                input: [
+                  { type: 'text', text: `User master directive: ${v.text}` },
+                ],
+              });
+              results.push(`${a.role}: accepted by active turn`);
+            } else if (active) {
+              results.push(`${a.role}: starting; retry directive once running`);
+            } else {
+              this.store.put('tasks', {
+                ...task,
+                status: 'pending',
+                prompt: task.prompt + '\n\nUser master directive: ' + v.text,
+                error: undefined,
+              });
+              results.push(`${a.role}: queued for continuation`);
+            }
+          } catch (e) {
+            results.push(`${a.role}: ${String(e)}`);
+          }
+        }
+        record.result =
+          results.join('\n') ||
+          'No assigned tasks to direct. Choose Plan to create work.';
+      }
+    } catch (e) {
+      record.result =
+        'Dispatch failed: ' + (e instanceof Error ? e.message : String(e));
+    }
+    this.store.put('commands', record);
+    return record;
+  }
   async addRepo(path: string, name: string) {
     const canonical = await this.git.validate(path);
     const existing = this.store
@@ -770,6 +874,7 @@ export class Engine {
   }
   snapshot() {
     return {
+      commands: this.store.all('commands'),
       accounts: this.store.all('accounts'),
       repos: this.store.all('repos'),
       projects: this.store.all('projects'),

@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { request } from 'node:http';
 import { WebSocket } from 'ws';
 import { createNexusServer } from '../src/server.ts';
+import { seedSimulation, waitForSimulation } from '../src/simulation.ts';
 test(
   'HTTP and WebSocket enforce local origins and session token; API changes stream live',
   { timeout: 30000 },
@@ -84,6 +85,23 @@ test(
       ).json();
       assert.equal(state.accounts.length, 1);
       assert.ok(!JSON.stringify(state).includes(token));
+      const demo = await seedSimulation(nexus.engine);
+      await waitForSimulation(nexus.engine, demo.project.id);
+      const contributions = await (
+        await fetch(base + `/api/projects/${demo.project.id}/contributions`, {
+          headers,
+        })
+      ).json();
+      assert.ok(
+        contributions.some((c: { files: string[] }) =>
+          c.files.includes('backend.mjs'),
+        ),
+      );
+      assert.ok(
+        contributions.some((c: { files: string[] }) =>
+          c.files.includes('frontend.mjs'),
+        ),
+      );
     } finally {
       ws?.terminate();
       await nexus.close();

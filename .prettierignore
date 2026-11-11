@@ -3,3 +3,5 @@ dist
 .nexus
 .nexus-schema
 package-lock.json
+release
+release-desktop

@@ -9,6 +9,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { Store } from './db/store.ts';
 import { Engine } from './engine.ts';
+import { git } from './integrations/git.ts';
 import { Knowledge } from './integrations/knowledge.ts';
 import { executeMock, seedSimulation } from './simulation.ts';
 
@@ -63,6 +64,49 @@ export async function createNexusServer(
     next();
   });
   app.get('/api/state', (_req, res) => res.json(engine.snapshot()));
+  app.get('/api/projects/:id/contributions', async (req, res) => {
+    const p = store.get('projects', req.params.id),
+      repo = store.get('repos', p.repoId),
+      base = await git(repo.path, 'rev-parse', 'HEAD');
+    const results = await Promise.all(
+      store
+        .all('tasks')
+        .filter((t) => t.projectId === p.id && t.worktree)
+        .map(async (t) => {
+          try {
+            const tracked = await git(
+                t.worktree!,
+                'diff',
+                '--name-only',
+                '-z',
+                base,
+              ),
+              untracked = await git(
+                t.worktree!,
+                'ls-files',
+                '--others',
+                '--exclude-standard',
+                '-z',
+              );
+            return {
+              taskId: t.id,
+              base,
+              files: [
+                ...new Set(
+                  (tracked + '\0' + untracked).split('\0').filter(Boolean),
+                ),
+              ],
+            };
+          } catch {
+            return { taskId: t.id, base, files: [], unavailable: true };
+          }
+        }),
+    );
+    res.json(results);
+  });
+  app.post('/api/command', async (req, res) =>
+    res.json(await engine.command(req.body)),
+  );
   app.post('/api/accounts', (req, res) =>
     res.json(engine.addAccount(req.body)),
   );
@@ -334,9 +378,12 @@ if (
 ) {
   const port = Number(process.env.NEXUS_PORT || 4310);
   const nexus = await createNexusServer(undefined, port);
-  nexus.server.listen(port, '127.0.0.1', () =>
-    console.log(`Agent Nexus: http://127.0.0.1:${port}`),
-  );
+  nexus.server.listen(port, '127.0.0.1', () => {
+    const address = nexus.server.address();
+    const actual = address && typeof address !== 'string' ? address.port : port;
+    console.log(`Agent Nexus: http://127.0.0.1:${actual}`);
+    process.send?.({ type: 'ready', port: actual });
+  });
   let stopping = false;
   const stop = async () => {
     if (stopping) return;
