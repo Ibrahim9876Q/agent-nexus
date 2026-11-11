@@ -37,6 +37,16 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     authenticated = false;
     return result(m.id, {});
   }
+  if (m.method === 'account/rateLimits/read')
+    return result(m.id, {
+      rateLimits: {
+        primary: {
+          usedPercent: 23,
+          windowDurationMins: 300,
+          resetsAt: Math.floor(Date.now() / 1000) + 3600,
+        },
+      },
+    });
   if (m.method === 'thread/start') {
     if (!authenticated)
       return send({ id: m.id, error: { message: 'Sign in required' } });
@@ -47,6 +57,20 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   }
   if (m.method === 'turn/start') {
     result(m.id, { turn: { id: 'turn-' + process.pid, status: 'inProgress' } });
+    send({
+      method: 'item/completed',
+      params: {
+        threadId: thread.id,
+        item: {
+          id: 'fixture-command',
+          type: 'commandExecution',
+          command: 'node --version',
+          status: 'completed',
+          exitCode: 0,
+          durationMs: 20,
+        },
+      },
+    });
     return send({
       id: 'fixture-tool',
       method: 'item/tool/call',

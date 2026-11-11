@@ -61,7 +61,17 @@ else {
         height: 960,
         minWidth: 900,
         minHeight: 640,
-        backgroundColor: '#1e1e1e',
+        backgroundColor: '#071b23',
+        ...(process.platform === 'win32'
+          ? {
+              titleBarStyle: 'hidden',
+              titleBarOverlay: {
+                color: '#193d45',
+                symbolColor: '#d0e4d6',
+                height: 44,
+              },
+            }
+          : {}),
         title: 'Agent Nexus',
         autoHideMenuBar: true,
         webPreferences: {

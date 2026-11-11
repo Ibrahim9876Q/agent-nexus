@@ -12,6 +12,8 @@ Built with Electron, React, TypeScript, SQLite, and the official Codex app-serve
 
 ## The workspace
 
+The terminal interface includes bundled JetBrains Mono, adjustable text size, compact runtime command/edit/tool rows, and account capacity monitoring. Account setup offers **Drain account**, **Enable new work**, and **Refresh capacity**. Draining lets active work finish while holding new tasks. Quota is reported by Codex; unavailable values remain unknown. See [design and capacity notes](docs/DESIGN_AND_CAPACITY.md) for the TeamClaude-inspired improvements.
+
 | Tab              | What you do there                                                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **01 / Command** | Send master prompts, select one account or all project workers, create plans, and pause or resume scheduling. Opens first.                              |
@@ -26,7 +28,7 @@ The gear button opens **Workspace setup**, where you add accounts, local reposit
 
 - **Node.js 24.13 or newer**, including npm: [Node.js downloads](https://nodejs.org/en/download).
 - **Git for Windows**: [Git installation](https://git-scm.com/install/windows).
-- **GitHub CLI**, to authenticate and clone this private repository: [GitHub CLI](https://cli.github.com/).
+- **GitHub CLI**, for optional authenticated GitHub operations: [GitHub CLI](https://cli.github.com/).
 - **Codex CLI** for real agent execution. You can test the simulation before installing or signing into Codex.
 
 Open a **new PowerShell window** after installation and check:
@@ -54,7 +56,7 @@ gh repo clone Ibrahim9876Q/agent-nexus
 cd agent-nexus
 ```
 
-**This repository is private.** Another GitHub account needs access before it can clone it. Your GitHub login is separate from the ChatGPT accounts you will connect inside Nexus.
+**This repository is public.** You can also clone it without GitHub CLI using `git clone https://github.com/Ibrahim9876Q/agent-nexus.git`. Your GitHub login is separate from the ChatGPT accounts you connect inside Nexus.
 
 ### 3. Install, build, and launch
 
@@ -305,7 +307,7 @@ Do not copy credentials into your Git repository. Moving between laptops require
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `node`, `git`, or `gh` is not recognized       | Install the prerequisite, then open a new terminal so PATH updates apply.                                                                       |
 | PowerShell blocks an npm script wrapper        | Use `npm.cmd`, as shown above.                                                                                                                  |
-| GitHub says repository not found               | It is private. Check `gh auth status` and use an authorized GitHub account.                                                                     |
+| GitHub says repository not found               | Check the repository URL and your network connection. The repository is public.                                                                 |
 | Desktop opens blank or assets are missing      | Run `npm.cmd run build` before `npm.cmd run desktop`.                                                                                           |
 | Startup timeout / backend stopped              | Check `node --version` is at least 24.13 and launch from the checkout terminal.                                                                 |
 | Codex disconnects, cannot spawn, or times out  | Set `NEXUS_CODEX_BIN` to a native `codex.exe`, then run the runtime probe. A working `codex` shell wrapper alone is insufficient.               |

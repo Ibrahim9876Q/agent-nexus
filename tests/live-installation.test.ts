@@ -112,6 +112,10 @@ test('Codex provider path runs through subprocess RPC, login, host tools, stream
     )
       await delay();
     assert.equal(store.get('accounts', account.id).status, 'ready');
+    assert.equal(
+      store.get('accounts', account.id).capacity?.primary?.usedPercent,
+      23,
+    );
     const repo = store.put('repos', {
         id: id(),
         name: 'Test repository',
@@ -133,6 +137,7 @@ test('Codex provider path runs through subprocess RPC, login, host tools, stream
       await delay();
     const finished = store.get('tasks', task.id);
     assert.equal(finished.status, 'completed');
+    assert.equal(finished.activity?.[0].label, 'node --version');
     assert.match(finished.output!, /Protocol fixture/);
     assert.match(
       await readFile(join(finished.worktree!, 'protocol-evidence.txt'), 'utf8'),

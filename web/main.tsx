@@ -11,6 +11,10 @@ import type {
   Tables,
 } from '../src/types';
 import { Brain } from './brain';
+import { AccountCapacity } from './AccountCapacity';
+import '@fontsource/jetbrains-mono/latin-400.css';
+import '@fontsource/jetbrains-mono/latin-500.css';
+import '@fontsource/jetbrains-mono/latin-600.css';
 import './workspace.css';
 export type State = {
   installation: 'live' | 'mock';
@@ -47,7 +51,25 @@ function App() {
     [auth, setAuth] = useState(''),
     [selected, setSelected] = useState(''),
     [repoPath, setRepoPath] = useState(''),
+    [fontScale, setFontScale] = useState(() => {
+      try {
+        const n = Number(localStorage.getItem('nexus-font-scale'));
+        return n >= 0.9 && n <= 1.3 ? n : 1;
+      } catch {
+        return 1;
+      }
+    }),
+    [shortcuts, setShortcuts] = useState(false),
     [busy, setBusy] = useState(false);
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      '--font-scale',
+      String(fontScale),
+    );
+    try {
+      localStorage.setItem('nexus-font-scale', String(fontScale));
+    } catch {}
+  }, [fontScale]);
   useEffect(() => {
     let dead = false,
       ws: WebSocket,
@@ -129,7 +151,7 @@ function App() {
     }
   }
   return (
-    <div className="desktop">
+    <div className={'desktop ' + (window.nexusDesktop ? 'native-window' : '')}>
       <aside className="ribbon">
         <span className="mark">N</span>
         <button title="Command" onClick={() => setTab('Command')}>
@@ -151,7 +173,12 @@ function App() {
       </aside>
       <aside className="explorer">
         <div className="workspace-name">
-          nexus workspace{' '}
+          <span>
+            <strong>
+              nexus<span className="brand-slash">/</span>
+            </strong>
+            <small>LOCAL WORKSPACE</small>
+          </span>{' '}
           <button title="Setup" onClick={() => setSettings(!settings)}>
             ＋
           </button>
@@ -185,17 +212,20 @@ function App() {
             ⌄ &nbsp; connected accounts <small>{s.accounts.length}</small>
           </div>
           {s.accounts.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => {
-                setTarget(a.id);
-                setTab('Agents');
-              }}
-            >
-              <i className={a.status === 'ready' ? 'ready' : ''} />
-              {a.name}
-              <small>{a.provider}</small>
-            </button>
+            <div className="sidebar-account" key={a.id}>
+              <button
+                key={a.id}
+                onClick={() => {
+                  setTarget(a.id);
+                  setTab('Agents');
+                }}
+              >
+                <i className={a.status === 'ready' ? 'ready' : ''} />
+                {a.name}
+                <small>{a.provider}</small>
+              </button>
+              <AccountCapacity account={a} compact />
+            </div>
           ))}
           <button className="add-account" onClick={() => setSettings(true)}>
             ＋ Connect account
@@ -218,9 +248,11 @@ function App() {
           ))}
         </div>
         <div className="explorer-bottom">
-          LOCAL FIRST
+          <span className="terminal-connected">●</span> LOCAL ENGINE
           <br />
-          <span>Independent accounts. Shared direction.</span>
+          <span>
+            {s.accounts.length} accounts / {s.repos.length} repositories
+          </span>
         </div>
       </aside>
       <section className="surface">
@@ -241,7 +273,30 @@ function App() {
               <small>0{i + 1}</small>
             </button>
           ))}
-          <span className="tabbar-end">agent nexus</span>
+          <div className="tabbar-end">
+            <button
+              aria-label="Decrease text size"
+              onClick={() =>
+                setFontScale((v) => Math.max(0.9, +(v - 0.1).toFixed(1)))
+              }
+            >
+              A−
+            </button>
+            <button
+              aria-label="Increase text size"
+              onClick={() =>
+                setFontScale((v) => Math.min(1.3, +(v + 0.1).toFixed(1)))
+              }
+            >
+              A＋
+            </button>
+            <button
+              aria-label="Keyboard shortcuts"
+              onClick={() => setShortcuts(true)}
+            >
+              ?
+            </button>
+          </div>
         </div>
         <div className="breadcrumb">
           workspace /{' '}
@@ -251,6 +306,23 @@ function App() {
             <i className={connected ? 'ready' : ''} />
             {connected ? 'local engine connected' : 'reconnecting'}
           </span>
+        </div>
+        <div className="session-strip">
+          <span>
+            <span className="terminal-caret">›</span>{' '}
+            {project
+              ? s.projects.find((p) => p.id === project)?.name
+              : 'no workspace selected'}
+          </span>
+          <span>
+            {tasks.filter((t) => t.status === 'running').length} running{' '}
+            <em>/</em> {tasks.filter((t) => t.status === 'completed').length}{' '}
+            done
+          </span>
+          <button onClick={() => setSettings(true)}>
+            accounts [{s.accounts.filter((a) => a.status === 'ready').length}/
+            {s.accounts.length}]
+          </button>
         </div>
         {error && (
           <div className="error">
@@ -288,20 +360,52 @@ function App() {
             <div className="chat-scroll">
               {!commands.length && (
                 <div className="welcome">
-                  <div className="terminal-symbol">›_</div>
+                  <div className="terminal-symbol">
+                    nexus<span>_</span>
+                  </div>
                   <span>
                     {project ? 'COMMAND CENTER' : 'NO WORKSPACE OPEN'}
                   </span>
                   <h1>
                     {project
-                      ? 'What would you like to build?'
-                      : 'Open your workspace.'}
+                      ? 'Ready for your next instruction.'
+                      : 'Your terminal. Your team.'}
                   </h1>
                   <p>
                     {project
                       ? 'Your first prompt starts the coordinator. Tasks, messages, and contributions appear as your agents work.'
-                      : 'Connect your Codex accounts and open a local Git project to begin. No agents run until you send a prompt.'}
+                      : 'Connect your accounts. Open a Git workspace. Send the first instruction.'}
                   </p>
+                  {!project && (
+                    <div className="startup-checks">
+                      <div>
+                        <span
+                          className={connected ? 'check-ok' : 'check-pending'}
+                        >
+                          {connected ? '[ok]' : '[..]'}
+                        </span>
+                        local engine{' '}
+                        <small>{connected ? 'connected' : 'connecting'}</small>
+                      </div>
+                      <div>
+                        <span className={ready ? 'check-ok' : 'check-pending'}>
+                          {ready ? '[ok]' : '[  ]'}
+                        </span>
+                        Codex accounts{' '}
+                        <small>
+                          {
+                            s.accounts.filter((a) => a.status === 'ready')
+                              .length
+                          }{' '}
+                          ready
+                        </small>
+                      </div>
+                      <div>
+                        <span className="check-pending">[ ]</span>project
+                        workspace <small>awaiting selection</small>
+                      </div>
+                    </div>
+                  )}
                   {project && (
                     <div className="quick-prompts">
                       {[
@@ -422,19 +526,24 @@ function App() {
                 }}
               />
               <div className="composer-bottom">
-                <span>Inherited permissions · approval gates active</span>
+                <span>
+                  <span className="terminal-caret">›</span>{' '}
+                  {project ? 'instruction' : 'waiting for workspace'}{' '}
+                  <span className="composer-key">Ctrl ↵</span>
+                </span>
                 <button
                   className="accent"
                   disabled={busy || !project || !ready || !prompt.trim()}
                   onClick={() => void send()}
                 >
-                  Send directive ↑
+                  Send ↵
                 </button>
               </div>
             </div>
             <div className="composer-hint">
-              Ctrl + Enter to send · Active turns receive steering; idle workers
-              queue continuation.
+              <button onClick={() => setShortcuts(true)}>?</button> for
+              shortcuts <span>·</span> Active turns accept steering; idle
+              workers queue.
             </div>
           </div>
         )}
@@ -521,6 +630,53 @@ function App() {
                 <div className="worker-stream">
                   <div className="stream-label">ASSIGNMENT</div>
                   <pre>{activeTask.prompt}</pre>
+                  <div className="stream-label">RUNTIME ACTIVITY</div>
+                  <div className="activity-lines">
+                    {activeTask.activity?.length ? (
+                      activeTask.activity.map((item) => (
+                        <details
+                          key={item.id}
+                          className={
+                            'activity-line ' +
+                            (item.exitCode != null && item.exitCode !== 0
+                              ? 'failed'
+                              : '')
+                          }
+                        >
+                          <summary>
+                            <span className="activity-bullet">
+                              {item.status === 'running'
+                                ? '◌'
+                                : item.exitCode != null && item.exitCode !== 0
+                                  ? '×'
+                                  : '·'}
+                            </span>
+                            <strong>
+                              {item.kind === 'command'
+                                ? 'Shell'
+                                : item.kind === 'file'
+                                  ? 'Edit'
+                                  : 'Tool'}
+                            </strong>
+                            <span>{item.label}</span>
+                            <small>
+                              {item.exitCode != null
+                                ? `exit ${item.exitCode}`
+                                : item.status}
+                              {item.durationMs != null
+                                ? ` · ${(item.durationMs / 1000).toFixed(1)}s`
+                                : ''}
+                            </small>
+                          </summary>
+                          <pre>{item.label}</pre>
+                        </details>
+                      ))
+                    ) : (
+                      <p className="activity-empty">
+                        No command or tool events reported yet.
+                      </p>
+                    )}
+                  </div>
                   <div className="stream-label">
                     LIVE OUTPUT / {activeTask.status.toUpperCase()}
                   </div>
@@ -569,8 +725,13 @@ function App() {
           <span>
             {tasks.filter((t) => t.status === 'running').length} running
           </span>
-          <span>⑂ isolated worktrees</span>
-          <span className="footer-right">{tab} / nexus 0.2</span>
+          <span className="status-branch">
+            ⑂ {activeTask?.branch || 'no branch selected'}
+          </span>
+          <span className="footer-right">
+            {tab.toLowerCase()} <span className="status-separator">/</span>{' '}
+            nexus
+          </span>
         </footer>
       </section>
       {settings && (
@@ -597,7 +758,19 @@ function App() {
                   <small>
                     {a.status} · {a.detail || a.provider}
                   </small>
+                  <AccountCapacity account={a} />
                 </div>
+                <button
+                  onClick={() =>
+                    void act(() =>
+                      api(`/accounts/${a.id}/admission`, {
+                        enabled: a.enabled === false,
+                      }),
+                    )
+                  }
+                >
+                  {a.enabled === false ? 'Enable new work' : 'Drain account'}
+                </button>
                 {a.provider === 'codex' && (
                   <>
                     <button
@@ -618,6 +791,15 @@ function App() {
                     >
                       Verify
                     </button>
+                    {a.status === 'ready' && (
+                      <button
+                        onClick={() =>
+                          void act(() => api(`/accounts/${a.id}/capacity`, {}))
+                        }
+                      >
+                        Refresh capacity
+                      </button>
+                    )}
                     {a.status === 'signing-in' && (
                       <button
                         onClick={() =>
@@ -758,6 +940,31 @@ function App() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+      {shortcuts && (
+        <div className="setup-backdrop" onClick={() => setShortcuts(false)}>
+          <div className="setup shortcuts" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-title">
+              <h2>Keyboard & navigation</h2>
+              <button
+                aria-label="Close shortcuts"
+                onClick={() => setShortcuts(false)}
+              >
+                ×
+              </button>
+            </div>
+            <p>
+              <kbd>Ctrl</kbd> + <kbd>Enter</kbd> send master instruction
+            </p>
+            <p>
+              <kbd>A−</kbd> / <kbd>A＋</kbd> adjust terminal text size
+            </p>
+            <p>
+              <kbd>Scroll</kbd> zoom the Brain · drag empty canvas to pan
+            </p>
+            <p>Click an agent node to inspect ownership and open its stream.</p>
           </div>
         </div>
       )}

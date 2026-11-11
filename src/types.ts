@@ -1,4 +1,20 @@
 export type Account = {
+  enabled?: boolean;
+  cooldownUntil?: number;
+  capacity?: {
+    primary?: {
+      usedPercent: number;
+      windowDurationMins?: number | null;
+      resetsAt?: number | null;
+    };
+    secondary?: {
+      usedPercent: number;
+      windowDurationMins?: number | null;
+      resetsAt?: number | null;
+    };
+    observedAt: number;
+  };
+  capacityError?: string;
   id: string;
   name: string;
   provider: 'mock' | 'codex';
@@ -32,6 +48,15 @@ export type Agent = {
   taskId?: string;
 };
 export type Task = {
+  activity?: {
+    id: string;
+    kind: 'command' | 'file' | 'tool';
+    label: string;
+    status: string;
+    at: number;
+    exitCode?: number | null;
+    durationMs?: number | null;
+  }[];
   id: string;
   projectId: string;
   agentId: string;

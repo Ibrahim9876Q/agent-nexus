@@ -6,6 +6,11 @@ import { GitService } from './integrations/git.ts';
 import { Accounts, type CodexConnection } from './providers/codex.ts';
 import { dynamicTools } from './tools.ts';
 import type { Account, Agent, Task, Message, Approval } from './types.ts';
+import {
+  admissionReason,
+  capacityUpdate,
+  backoffUntil,
+} from './account-capacity.ts';
 
 const short = z.string().min(1).max(200),
   text = z.string().min(1).max(30000);
@@ -53,6 +58,7 @@ export class Engine {
   private runs = new Set<Promise<void>>();
   private stalled = new Set<string>();
   private logins = new Map<string, string>();
+  private nextAdmission = new Map<string, number>();
   constructor(
     readonly store: Store,
     readonly dataDir: string,
@@ -108,14 +114,17 @@ export class Engine {
     try {
       const c = await this.accounts.connection(a);
       const result = await c.request('account/read', { refreshToken: false });
-      return this.store.put('accounts', {
-        ...a,
+      const verified = this.store.put('accounts', {
+        ...this.store.get('accounts', accountId),
         status: result.account ? 'ready' : 'signed-out',
         detail:
           result.account?.type === 'chatgpt'
             ? `${result.account.email || 'ChatGPT'} · ${result.account.planType ?? ''}`
             : (result.account?.type ?? 'Sign in required'),
       });
+      if (verified.status === 'ready')
+        await this.refreshCapacity(accountId).catch(() => {});
+      return this.store.get('accounts', accountId);
     } catch (e) {
       this.store.put('accounts', {
         ...a,
@@ -124,6 +133,34 @@ export class Engine {
       });
       throw e;
     }
+  }
+  async refreshCapacity(accountId: string) {
+    const account = this.store.get('accounts', accountId);
+    if (account.provider !== 'codex') return account;
+    try {
+      const c = await this.accounts.connection(account);
+      const result = await c.request('account/rateLimits/read');
+      return this.store.put(
+        'accounts',
+        capacityUpdate(
+          this.store.get('accounts', accountId),
+          result.rateLimits,
+          Date.now(),
+          false,
+        ),
+      );
+    } catch (e) {
+      this.store.put('accounts', {
+        ...this.store.get('accounts', accountId),
+        capacityError: 'Capacity unavailable from runtime',
+      });
+      throw e;
+    }
+  }
+  setAdmission(accountId: string, enabled: boolean) {
+    const a = this.store.get('accounts', accountId);
+    this.store.event('account.admission', { accountId, enabled });
+    return this.store.put('accounts', { ...a, enabled });
   }
   async login(accountId: string) {
     if (
@@ -220,9 +257,11 @@ export class Engine {
             : this.store
                 .all('accounts')
                 .find((a) => a.provider === 'codex' && a.status === 'ready');
-        if (!account || account.status !== 'ready')
+        if (!account || admissionReason(account))
           throw new Error(
-            'Connect and select a ready coordinator account first.',
+            account
+              ? `Coordinator account is ${admissionReason(account)}. Enable it or wait for its capacity to return.`
+              : 'Connect and select a ready coordinator account first.',
           );
         const agent = this.addAgent(
           account.id,
@@ -425,6 +464,10 @@ export class Engine {
         throw new Error(
           'Plan assigns work to an account that is not signed in.',
         );
+      if (admissionReason(this.store.get('accounts', t.accountId)))
+        throw new Error(
+          'Plan assigns work to an account not accepting new tasks.',
+        );
       visit(t.key);
     });
     return this.store.transaction(() => {
@@ -453,7 +496,7 @@ export class Engine {
           .all('accounts')
           .filter(
             (account) =>
-              account.status === 'ready' &&
+              !admissionReason(account) &&
               account.provider ===
                 this.store.get('accounts', a.accountId).provider,
           )
@@ -549,7 +592,9 @@ export class Engine {
         const a = this.store.get('agents', t.agentId),
           account = this.store.get('accounts', a.accountId);
         if (
-          account.status !== 'ready' ||
+          admissionReason(account) ||
+          (account.provider === 'codex' &&
+            (this.nextAdmission.get(account.id) || 0) > Date.now()) ||
           this.active.has(t.id) ||
           a.status === 'retired'
         )
@@ -590,6 +635,8 @@ export class Engine {
         });
         if (conflicts) continue;
         this.active.set(t.id, {});
+        if (account.provider === 'codex')
+          this.nextAdmission.set(account.id, Date.now() + 750);
         const run = this.run(t, a, account);
         this.runs.add(run);
         void run.finally(() => this.runs.delete(run));
@@ -798,6 +845,18 @@ export class Engine {
     });
     c.on('notification', (msg: any) => {
       if (this.closing) return;
+      if (msg.method === 'account/rateLimits/updated') {
+        try {
+          this.store.put(
+            'accounts',
+            capacityUpdate(
+              this.store.get('accounts', account.id),
+              msg.params.rateLimits,
+            ),
+          );
+        } catch {}
+        return;
+      }
       if (msg.method === 'account/login/completed') {
         this.logins.delete(account.id);
         if (msg.params?.success) void this.verify(account.id).catch(() => {});
@@ -822,6 +881,45 @@ export class Engine {
       if (!a?.taskId || !this.active.has(a.taskId)) return;
       const t = this.store.get('tasks', a.taskId);
       this.store.put('tasks', { ...t, heartbeat: Date.now() });
+      if (['item/started', 'item/completed'].includes(msg.method)) {
+        const item = msg.params.item;
+        const kind =
+          item?.type === 'commandExecution'
+            ? 'command'
+            : item?.type === 'fileChange'
+              ? 'file'
+              : ['dynamicToolCall', 'mcpToolCall'].includes(item?.type)
+                ? 'tool'
+                : undefined;
+        if (kind) {
+          const row = {
+            id: item.id,
+            kind: kind as 'command' | 'file' | 'tool',
+            label: String(
+              kind === 'command'
+                ? item.command
+                : kind === 'file'
+                  ? item.changes?.map((c: any) => c.path).join(', ')
+                  : item.tool || item.server || 'Tool call',
+            ).slice(0, 500),
+            status:
+              msg.method === 'item/started'
+                ? 'running'
+                : item.status || 'completed',
+            at: Date.now(),
+            exitCode: item.exitCode,
+            durationMs: item.durationMs,
+          };
+          const current = this.store.get('tasks', t.id);
+          this.store.put('tasks', {
+            ...current,
+            activity: [
+              ...(current.activity || []).filter((e) => e.id !== row.id),
+              row,
+            ].slice(-100),
+          });
+        }
+      }
       if (msg.method === 'turn/started') {
         const run = this.active.get(t.id);
         if (run) run.turnId = msg.params.turn.id;
@@ -840,6 +938,21 @@ export class Engine {
           tool: msg.params.item.tool,
           status: msg.params.item.status,
         });
+      if (msg.method === 'turn/completed') {
+        const until = backoffUntil(msg.params.turn.error?.codexErrorInfo);
+        if (until) {
+          this.store.put('accounts', {
+            ...this.store.get('accounts', account.id),
+            cooldownUntil: until,
+          });
+          this.store.event('account.cooldown', {
+            accountId: account.id,
+            until,
+          });
+        }
+        if (msg.params.turn.error?.codexErrorInfo === 'usageLimitExceeded')
+          void this.refreshCapacity(account.id).catch(() => {});
+      }
       if (msg.method === 'turn/completed')
         this.finish(
           t.id,
