@@ -1,6 +1,6 @@
 import type { Account } from '../src/types';
 import { admissionReason } from '../src/account-capacity';
-// Read-only telemetry. Unknown data is never shown as unused quota.
+
 export function AccountCapacity({
   account,
   compact = false,
@@ -10,62 +10,52 @@ export function AccountCapacity({
 }) {
   const windows = [account.capacity?.primary, account.capacity?.secondary];
   const reason = admissionReason(account);
+  const observed = account.capacity
+    ? new Date(account.capacity.observedAt).toLocaleTimeString()
+    : 'unavailable';
   return (
     <div className={'capacity ' + (compact ? 'compact' : '')}>
-      <div className="capacity-state">
-        <span className={reason ? 'waiting' : 'available'}>
-          {reason || 'accepting work'}
-        </span>
-        {!compact && (
-          <small>
-            {account.capacity
-              ? `observed ${new Date(account.capacity.observedAt).toLocaleTimeString()}`
-              : 'limits not reported'}
-          </small>
-        )}
-      </div>
-      {windows.some(Boolean) ? (
-        windows.map(
-          (w, i) =>
-            w && (
-              <div
-                className="capacity-window"
-                key={i}
-                title={
-                  w.resetsAt
-                    ? `Reset: ${new Date(w.resetsAt * 1000).toLocaleString()}`
-                    : 'Reset time unavailable'
-                }
-              >
-                <span>
-                  {w.windowDurationMins
-                    ? `${w.windowDurationMins >= 60 ? Math.round(w.windowDurationMins / 60) + 'h' : w.windowDurationMins + 'm'} window`
-                    : i === 0
-                      ? 'primary'
-                      : 'secondary'}
-                </span>
-                <meter
-                  min="0"
-                  max="100"
-                  value={Math.min(100, w.usedPercent)}
-                  aria-label={`${i === 0 ? 'Primary' : 'Secondary'} quota used`}
-                />
-                <b>{Math.round(w.usedPercent)}%</b>
-                {!compact && w.resetsAt && (
-                  <small>
-                    resets{' '}
-                    {new Date(w.resetsAt * 1000).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </small>
-                )}
-              </div>
-            ),
-        )
-      ) : (
-        <span className="capacity-unknown">— capacity unknown</span>
+      {(!compact || reason) && (
+        <div className="capacity-state">
+          <span className={reason ? 'waiting' : 'available'}>
+            {reason || 'accepting work'}
+          </span>
+          {!compact && <small>observed {observed}</small>}
+        </div>
       )}
+      <div className="capacity-percentages">
+        {windows.map((window, i) => {
+          const label = window?.windowDurationMins
+            ? window.windowDurationMins >= 60
+              ? Math.round(window.windowDurationMins / 60) + 'h'
+              : window.windowDurationMins + 'm'
+            : i === 0
+              ? 'Primary'
+              : 'Secondary';
+          return (
+            <div
+              key={i}
+              className="capacity-percentage"
+              title={
+                window
+                  ? label +
+                    ' quota used · observed ' +
+                    observed +
+                    (window.resetsAt
+                      ? ' · resets ' +
+                        new Date(window.resetsAt * 1000).toLocaleString()
+                      : '')
+                  : 'Usage not reported'
+              }
+            >
+              <span>{label}</span>
+              <b aria-label={label + ' quota used'}>
+                {window ? Math.round(window.usedPercent) + '%' : '—'}
+              </b>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

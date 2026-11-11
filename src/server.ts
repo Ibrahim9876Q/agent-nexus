@@ -114,6 +114,23 @@ export async function createNexusServer(
   app.post('/api/command', async (req, res) =>
     res.json(await engine.command(req.body)),
   );
+  app.post('/api/chats', (req, res) => {
+    const v = z
+      .object({
+        projectId: z.string().uuid(),
+        title: z.string().min(1).max(200).optional(),
+      })
+      .strict()
+      .parse(req.body);
+    res.json(engine.createChat(v.projectId, v.title));
+  });
+  app.post('/api/chats/:id', (req, res) => {
+    const v = z
+      .object({ title: z.string().min(1).max(200) })
+      .strict()
+      .parse(req.body);
+    res.json(engine.renameChat(req.params.id, v.title));
+  });
   app.post('/api/accounts', (req, res) => {
     if (
       (!mock && req.body.provider !== 'codex') ||
@@ -223,6 +240,7 @@ export async function createNexusServer(
         permissions: z
           .enum(['read-only', 'workspace-write'])
           .default('workspace-write'),
+        chatId: z.string().uuid().optional(),
       })
       .strict()
       .parse(req.body);
@@ -232,6 +250,7 @@ export async function createNexusServer(
       v.role,
       undefined,
       v.permissions,
+      v.chatId,
     );
     res.json(engine.addTask(a.id, v.title, v.prompt, v.dependencies));
   });

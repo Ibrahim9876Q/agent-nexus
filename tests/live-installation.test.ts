@@ -40,6 +40,7 @@ test('live server starts empty and refuses simulation and mock accounts', async 
       'agents',
       'tasks',
       'commands',
+      'chats',
       'messages',
     ])
       assert.deepEqual(state[key], []);
@@ -87,6 +88,24 @@ test('live server starts empty and refuses simulation and mock accounts', async 
       }),
     });
     assert.equal(opened.status, 200);
+    const project = await opened.json();
+    const chatRequest = () =>
+      fetch(base + '/api/chats', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ projectId: project.id }),
+      });
+    const chatA = await (await chatRequest()).json();
+    const chatB = await (await chatRequest()).json();
+    assert.notEqual(chatA.id, chatB.id);
+    const renamed = await fetch(base + '/api/chats/' + chatB.id, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ title: 'Research chat' }),
+    });
+    assert.equal(renamed.status, 200);
+    assert.equal((await renamed.json()).title, 'Research chat');
+    assert.equal(app.store.all('chats').length, 2);
     assert.equal(app.store.all('tasks').length, 0);
     assert.equal(app.store.all('agents').length, 0);
   } finally {

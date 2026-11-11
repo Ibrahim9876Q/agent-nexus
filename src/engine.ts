@@ -18,6 +18,7 @@ import {
   runtimeSettings,
 } from './runtime-settings.ts';
 import { reportedUsage, responseUpdate } from './response-stream.ts';
+import { chatTitle, migrateChats } from './chats.ts';
 
 const short = z.string().min(1).max(200),
   text = z.string().min(1).max(30000);
@@ -79,6 +80,7 @@ export class Engine {
       (a, c) => this.attach(a, c),
       hooks.connectionFactory,
     );
+    migrateChats(store);
     for (const project of store.all('projects'))
       store.put('projects', { ...project, status: 'paused' });
     for (const t of store.all('tasks').filter((t) => t.status === 'running'))
@@ -280,6 +282,25 @@ export class Engine {
       detail: 'Sign in required',
     });
   }
+  createChat(projectId: string, title = 'New chat') {
+    this.store.get('projects', projectId);
+    const now = new Date().toISOString();
+    return this.store.put('chats', {
+      id: id(),
+      projectId,
+      title: short.parse(title.trim()),
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  renameChat(chatId: string, title: string) {
+    const chat = this.store.get('chats', chatId);
+    return this.store.put('chats', {
+      ...chat,
+      title: short.parse(title.trim()),
+      updatedAt: new Date().toISOString(),
+    });
+  }
   async command(input: unknown) {
     const v = z
       .object({
@@ -289,22 +310,31 @@ export class Engine {
           .enum(['chat', 'direct', 'plan', 'pause', 'resume'])
           .default('chat'),
         accountId: z.string().uuid().optional(),
+        chatId: z.string().uuid().optional(),
       })
       .strict()
       .parse(input);
     const project = this.store.get('projects', v.projectId);
+    const chat = v.chatId
+      ? this.store.get('chats', v.chatId)
+      : this.store.all('chats').find((c) => c.projectId === project.id) ||
+        this.createChat(project.id);
+    if (chat.projectId !== project.id)
+      throw new Error('Chat belongs to another workspace');
     if (v.accountId) this.store.get('accounts', v.accountId);
     const targets = this.store
       .all('agents')
       .filter(
         (a) =>
           a.projectId === project.id &&
+          a.chatId === chat.id &&
           a.status !== 'retired' &&
           (!v.accountId || a.accountId === v.accountId),
       );
     const record: import('./types.ts').Tables['commands'] = {
       id: id(),
       projectId: project.id,
+      chatId: chat.id,
       text: v.text,
       mode: v.mode,
       at: new Date().toISOString(),
@@ -313,6 +343,11 @@ export class Engine {
       taskIds: [],
     };
     this.store.put('commands', record);
+    this.store.put('chats', {
+      ...chat,
+      title: chat.title === 'New chat' ? chatTitle(v.text) : chat.title,
+      updatedAt: record.at,
+    });
     try {
       if (v.mode === 'pause' || v.mode === 'resume') {
         await this.pause(project.id, v.mode === 'pause');
@@ -341,6 +376,7 @@ export class Engine {
                 .find(
                   (a) =>
                     a.projectId === project.id &&
+                    a.chatId === chat.id &&
                     a.accountId === account.id &&
                     a.role === 'coordinator' &&
                     a.status !== 'retired',
@@ -385,6 +421,7 @@ export class Engine {
               'coordinator',
               undefined,
               v.mode === 'plan' ? 'read-only' : 'workspace-write',
+              chat.id,
             );
         const task = this.addTask(
           agent.id,
@@ -478,10 +515,15 @@ export class Engine {
     role: string,
     parentId?: string,
     permissions: Agent['permissions'] = 'workspace-write',
+    chatId?: string,
   ) {
     const account = this.store.get('accounts', accountId);
     this.store.get('projects', projectId);
     const parent = parentId ? this.store.get('agents', parentId) : undefined;
+    if (chatId && this.store.get('chats', chatId).projectId !== projectId)
+      throw new Error('Chat belongs to another workspace');
+    if (parent && chatId && parent.chatId !== chatId)
+      throw new Error('Delegation cannot change chat');
     if (
       parent &&
       (parent.accountId !== accountId || parent.projectId !== projectId)
@@ -497,10 +539,16 @@ export class Engine {
         .length >= account.maxAgents
     )
       throw new Error('Account agent limit reached');
+    const resolvedChatId =
+      parent?.chatId ||
+      chatId ||
+      this.store.all('chats').find((c) => c.projectId === projectId)?.id ||
+      this.createChat(projectId).id;
     return this.store.put('agents', {
       id: id(),
       accountId,
       projectId,
+      chatId: resolvedChatId,
       role: short.parse(role),
       parentId,
       depth,
@@ -532,9 +580,12 @@ export class Engine {
     for (const d of dependencies)
       if (this.store.get('tasks', d).projectId !== agent.projectId)
         throw new Error('Cross-project dependency denied');
+      else if (this.store.get('tasks', d).chatId !== agent.chatId)
+        throw new Error('Cross-chat dependency denied');
     const task: Task = {
       id: id(),
       projectId: agent.projectId,
+      chatId: agent.chatId,
       agentId,
       title: short.parse(title),
       prompt: text.parse(prompt),
@@ -613,7 +664,14 @@ export class Engine {
       const created = new Map<string, Task>();
       for (const key of visited) {
         const t = tasks.find((x) => x.key === key)!;
-        const a = this.addAgent(t.accountId, coordinator.projectId, t.role);
+        const a = this.addAgent(
+          t.accountId,
+          coordinator.projectId,
+          t.role,
+          undefined,
+          'workspace-write',
+          coordinator.chatId,
+        );
         const parentTask = coordinator.taskId
           ? this.store.get('tasks', coordinator.taskId)
           : undefined;
@@ -656,10 +714,10 @@ export class Engine {
           })),
         agents: this.store
           .all('agents')
-          .filter((x) => x.projectId === a.projectId),
+          .filter((x) => x.projectId === a.projectId && x.chatId === a.chatId),
         tasks: this.store
           .all('tasks')
-          .filter((x) => x.projectId === a.projectId),
+          .filter((x) => x.projectId === a.projectId && x.chatId === a.chatId),
       };
     if (name === 'nexus_inbox') return this.bus.inbox(a.id);
     if (name === 'nexus_ack') {
@@ -1353,6 +1411,7 @@ export class Engine {
   }
   snapshot() {
     return {
+      chats: this.store.all('chats'),
       commands: this.store.all('commands'),
       accounts: this.store.all('accounts'),
       repos: this.store.all('repos'),

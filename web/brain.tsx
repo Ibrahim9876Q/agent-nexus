@@ -1,22 +1,60 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  forceSimulation,
-  forceLink,
-  forceManyBody,
-  forceCenter,
-  forceCollide,
-  type SimulationNodeDatum,
-} from 'd3-force';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { State } from './main';
 import { api } from './main';
-type Node = SimulationNodeDatum & {
-  id: string;
-  label: string;
-  kind: string;
-  detail: string;
+import {
+  graphCenter,
+  graphKinds,
+  graphLayout,
+  viewToWorld,
+  workspaceGraph,
+  type Contribution,
+  type GraphKind,
+  type Point,
+} from './graph-model';
+
+type Preferences = {
+  positions: Record<string, Point>;
+  labels: Record<GraphKind, boolean>;
 };
+const defaultLabels = {
+  repository: true,
+  project: true,
+  account: true,
+  agent: false,
+  task: false,
+  branch: false,
+  file: false,
+};
+function readPreferences(projectId: string): Preferences {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem('nexus-brain-' + projectId) || '{}',
+    );
+    const positions = Object.fromEntries(
+      Object.entries(value.positions || {}).filter(
+        ([, p]: [string, any]) =>
+          p &&
+          Number.isFinite(p.x) &&
+          Number.isFinite(p.y) &&
+          Math.abs(p.x) < 1e7 &&
+          Math.abs(p.y) < 1e7,
+      ),
+    );
+    const labels = Object.fromEntries(
+      graphKinds.map((kind) => [
+        kind,
+        typeof value.labels?.[kind] === 'boolean'
+          ? value.labels[kind]
+          : defaultLabels[kind],
+      ]),
+    ) as Preferences['labels'];
+    return { positions: positions as Preferences['positions'], labels };
+  } catch {
+    return { positions: {}, labels: { ...defaultLabels } };
+  }
+}
 export function Brain({
-  state: s,
+  state,
   projectId,
   onAgent,
 }: {
@@ -24,25 +62,28 @@ export function Brain({
   projectId: string;
   onAgent: (id: string) => void;
 }) {
-  const [nodes, setNodes] = useState<Node[]>([]),
-    [edges, setEdges] = useState<
-      { source: Node; target: Node; kind: string }[]
-    >([]),
-    [selected, setSelected] = useState<Node>(),
-    [scale, setScale] = useState(1),
-    [pan, setPan] = useState({ x: 0, y: 0 });
+  const [saved] = useState(() => readPreferences(projectId));
+  const [manual, setManual] = useState(saved.positions);
+  const manualRef = useRef(manual);
+  const [labels, setLabels] = useState(saved.labels);
+  const [controlsOpen, setControlsOpen] = useState(true);
+  const [selectedId, setSelectedId] = useState('');
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
+  const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<
-    { x: number; y: number; px: number; py: number } | undefined
+    { id?: string; start: Point; origin: Point; moved: boolean } | undefined
   >(undefined);
-  const [contributions, setContributions] = useState<
-    { taskId: string; files: string[]; base: string }[]
-  >([]);
-  const signature = s.tasks.map((t) => t.id + ':' + t.status).join();
+  const [contributions, setContributions] = useState<Contribution[]>([]);
+  const signature = state.tasks
+    .filter((t) => t.projectId === projectId)
+    .map((t) => t.id + ':' + t.status)
+    .join();
   useEffect(() => {
     let dead = false;
     setContributions([]);
     if (projectId)
-      api(`/projects/${projectId}/contributions`)
+      api('/projects/' + projectId + '/contributions')
         .then((result) => {
           if (!dead) setContributions(result);
         })
@@ -51,252 +92,337 @@ export function Brain({
       dead = true;
     };
   }, [projectId, signature]);
-  useEffect(() => {
-    const ns: Node[] = [],
-      ls: { source: string; target: string; kind: string }[] = [];
-    const add = (id: string, label: string, kind: string, detail: string) =>
-      ns.push({ id, label, kind, detail });
-    const link = (source: string, target: string, kind: string) =>
-      ls.push({ source, target, kind });
-    const p = s.projects.find((p) => p.id === projectId);
-    if (!p) {
-      setNodes([]);
-      setEdges([]);
-      return;
-    }
-    const repo = s.repos.find((r) => r.id === p.repoId)!;
-    add(repo.id, repo.name, 'repository', repo.path);
-    add(p.id, p.name, 'project', p.objective);
-    link(repo.id, p.id, 'contains');
-    for (const a of s.accounts.filter((a) =>
-      s.agents.some((w) => w.projectId === p.id && w.accountId === a.id),
-    )) {
-      add(
-        a.id,
-        a.name,
-        'account',
-        `${a.provider} · ${a.status} · ${a.concurrency} slots`,
+  const graph = useMemo(
+    () => workspaceGraph(state, projectId, contributions),
+    [state, projectId, contributions],
+  );
+  const topology = graph.nodes
+    .map((n) => [n.id, n.kind, n.accountId].join(':'))
+    .join('|');
+  const layout = useMemo(() => graphLayout(graph.nodes), [topology]);
+  const positions = { ...layout, ...manual };
+  const selected = graph.nodes.find((n) => n.id === selectedId);
+  const accounts = graph.nodes.filter((n) => n.kind === 'account');
+  function persist(positions = manualRef.current, names = labels) {
+    try {
+      localStorage.setItem(
+        'nexus-brain-' + projectId,
+        JSON.stringify({ positions, labels: names }),
       );
-      link(p.id, a.id, 'coordinates');
-    }
-    for (const a of s.agents.filter((a) => a.projectId === p.id)) {
-      add(a.id, a.role, 'agent', `${a.kind} · ${a.status} · ${a.permissions}`);
-      link(a.accountId, a.id, 'authenticates');
-      if (a.parentId) link(a.parentId, a.id, 'delegates');
-    }
-    for (const t of s.tasks.filter((t) => t.projectId === p.id)) {
-      add(t.id, t.title, 'task', `${t.status}\n${t.output || t.prompt}`);
-      link(t.agentId, t.id, 'owns');
-      for (const d of t.dependencies) link(d, t.id, 'prerequisite');
-      if (t.branch) {
-        const b = t.id + ':branch';
-        add(b, t.branch, 'branch', t.worktree || '');
-        link(t.id, b, 'contributes');
-        link(b, repo.id, 'worktree of');
-      }
-      for (const scope of t.scope) {
-        const f = repo.id + ':' + scope;
-        if (!ns.some((n) => n.id === f))
-          add(
-            f,
-            scope,
-            'file',
-            'Declared change scope; inspect Git diff to verify actual changes.',
-          );
-        link(t.id, f, 'scope');
-      }
-    }
-    for (const c of contributions)
-      for (const file of c.files) {
-        const key = repo.id + ':' + file;
-        if (!ns.some((n) => n.id === key))
-          add(
-            key,
-            file,
-            'file',
-            `Git-observed change relative to repository HEAD ${c.base.slice(0, 8)}. Includes uncommitted and untracked files.`,
-          );
-        link(c.taskId, key, 'changed');
-      }
-    for (const m of s.messages.filter((m) => m.projectId === p.id))
-      link(m.sender, m.recipient, 'communicates');
-    const valid = ls.filter(
-      (e) =>
-        ns.some((n) => n.id === e.source) && ns.some((n) => n.id === e.target),
-    );
-    const sim = forceSimulation(ns)
-      .force(
-        'link',
-        forceLink<Node, any>(valid)
-          .id((n) => n.id)
-          .distance(95),
-      )
-      .force('charge', forceManyBody().strength(-340))
-      .force('center', forceCenter(480, 330))
-      .force('collide', forceCollide(35))
-      .stop();
-    for (let i = 0; i < 180; i++) sim.tick();
-    setNodes([...ns]);
-    setEdges(valid as any);
-    return () => {
-      sim.stop();
-    };
-  }, [
-    s.projects,
-    s.repos,
-    s.accounts,
-    s.agents,
-    s.tasks,
-    s.messages,
-    projectId,
-    contributions,
-  ]);
+    } catch {}
+  }
+  function moveNode(id: string, point: Point) {
+    manualRef.current = { ...manualRef.current, [id]: point };
+    setManual(manualRef.current);
+  }
+  function viewPoint(event: {
+    clientX: number;
+    clientY: number;
+  }): Point | undefined {
+    const svg = svgRef.current;
+    const matrix = svg?.getScreenCTM();
+    if (!svg || !matrix) return;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    return point.matrixTransform(matrix.inverse());
+  }
+  function changeLabels(next: Preferences['labels']) {
+    setLabels(next);
+    persist(manualRef.current, next);
+  }
   return (
     <div className="brain">
       <div className="graph-toolbar">
         <div>
-          <strong>Workspace graph</strong>
-          <small>Actual ownership, delegation & Git relationships</small>
+          <strong>Workspace brain</strong>
+          <small>Repository at the center · accounts on the outside</small>
         </div>
         <button
           onClick={() => {
+            manualRef.current = {};
+            setManual({});
             setScale(1);
             setPan({ x: 0, y: 0 });
+            persist({});
           }}
         >
-          Reset view
+          Reset layout
         </button>
-        <button onClick={() => setScale((v) => Math.min(3, v + 0.2))}>
+        <button
+          aria-label="Zoom in"
+          onClick={() => setScale((v) => Math.min(3, v + 0.2))}
+        >
           ＋
         </button>
-        <button onClick={() => setScale((v) => Math.max(0.3, v - 0.2))}>
+        <button
+          aria-label="Zoom out"
+          onClick={() => setScale((v) => Math.max(0.3, v - 0.2))}
+        >
           −
         </button>
+        <button
+          aria-controls="brain-controls"
+          aria-expanded={controlsOpen}
+          onClick={() => setControlsOpen((v) => !v)}
+        >
+          Names & details
+        </button>
       </div>
-      <div
-        className="graph-canvas"
-        onWheel={(e) =>
-          setScale((v) => Math.max(0.3, Math.min(3, v - e.deltaY * 0.001)))
-        }
-      >
-        <svg
-          viewBox="0 0 960 660"
-          onPointerDown={(e) => {
-            if ((e.target as Element).tagName === 'svg') {
+      <div className="brain-layout">
+        <div
+          className="graph-canvas"
+          onWheel={(e) =>
+            setScale((v) => Math.max(0.3, Math.min(3, v - e.deltaY * 0.001)))
+          }
+        >
+          <svg
+            ref={svgRef}
+            viewBox="0 0 1200 900"
+            aria-label="Interactive workspace graph"
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              const point = viewPoint(e);
+              if (!point) return;
+              const id =
+                (e.target as Element)
+                  .closest('[data-node-id]')
+                  ?.getAttribute('data-node-id') || undefined;
+              if (id) setSelectedId(id);
               drag.current = {
-                x: e.clientX,
-                y: e.clientY,
-                px: pan.x,
-                py: pan.y,
+                id,
+                start: id ? viewToWorld(point, pan, scale) : point,
+                origin: id ? positions[id] : pan,
+                moved: false,
               };
               e.currentTarget.setPointerCapture(e.pointerId);
-            }
-          }}
-          onPointerMove={(e) => {
-            if (drag.current)
-              setPan({
-                x: drag.current.px + (e.clientX - drag.current.x),
-                y: drag.current.py + (e.clientY - drag.current.y),
-              });
-          }}
-          onPointerUp={() => {
-            drag.current = undefined;
-          }}
-        >
-          <g
-            transform={`translate(${pan.x} ${pan.y}) translate(480 330) scale(${scale}) translate(-480 -330)`}
+            }}
+            onPointerMove={(e) => {
+              const active = drag.current;
+              const point = viewPoint(e);
+              if (!active || !point) return;
+              const next = active.id ? viewToWorld(point, pan, scale) : point;
+              const dx = next.x - active.start.x,
+                dy = next.y - active.start.y;
+              if (Math.abs(dx) + Math.abs(dy) > 2) active.moved = true;
+              if (active.id)
+                moveNode(active.id, {
+                  x: active.origin.x + dx,
+                  y: active.origin.y + dy,
+                });
+              else setPan({ x: active.origin.x + dx, y: active.origin.y + dy });
+            }}
+            onPointerUp={(e) => {
+              const active = drag.current;
+              if (active?.id) {
+                persist();
+                if (!active.moved) setControlsOpen(true);
+              }
+              drag.current = undefined;
+              if (e.currentTarget.hasPointerCapture(e.pointerId))
+                e.currentTarget.releasePointerCapture(e.pointerId);
+            }}
+            onPointerCancel={() => {
+              if (drag.current?.id) persist();
+              drag.current = undefined;
+            }}
+            onLostPointerCapture={() => {
+              if (drag.current?.id) persist();
+              drag.current = undefined;
+            }}
           >
-            {edges.map((e, i) => (
-              <line
-                key={i}
-                className={'edge ' + e.kind}
-                x1={e.source.x}
-                y1={e.source.y}
-                x2={e.target.x}
-                y2={e.target.y}
-              >
-                <title>{e.kind}</title>
-              </line>
-            ))}
-            {nodes.map((n) => (
-              <g
-                key={n.id}
-                className={
-                  'graph-node ' +
-                  n.kind +
-                  (selected?.id === n.id ? ' picked' : '')
+            <g
+              transform={`translate(${pan.x} ${pan.y}) translate(${graphCenter.x} ${graphCenter.y}) scale(${scale}) translate(${-graphCenter.x} ${-graphCenter.y})`}
+            >
+              {accounts.length > 1 && (
+                <polyline
+                  className="account-orbit"
+                  aria-hidden="true"
+                  points={[
+                    ...accounts,
+                    ...(accounts.length > 2 ? [accounts[0]] : []),
+                  ]
+                    .map((a) => positions[a.id].x + ',' + positions[a.id].y)
+                    .join(' ')}
+                />
+              )}
+              {graph.edges.map((edge) => (
+                <line
+                  className={'edge ' + edge.kind}
+                  key={JSON.stringify(edge)}
+                  x1={positions[edge.source].x}
+                  y1={positions[edge.source].y}
+                  x2={positions[edge.target].x}
+                  y2={positions[edge.target].y}
+                >
+                  <title>{edge.kind}</title>
+                </line>
+              ))}
+              {graph.nodes.map((node) => {
+                const point = positions[node.id];
+                return (
+                  <g
+                    key={node.id}
+                    data-node-id={node.id}
+                    className={
+                      'graph-node ' +
+                      node.kind +
+                      (selectedId === node.id ? ' picked' : '')
+                    }
+                    role="button"
+                    tabIndex={0}
+                    aria-label={node.kind + ': ' + node.label}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedId(node.id);
+                        setControlsOpen(true);
+                      }
+                      const delta: Record<string, Point> = {
+                        ArrowLeft: { x: -10, y: 0 },
+                        ArrowRight: { x: 10, y: 0 },
+                        ArrowUp: { x: 0, y: -10 },
+                        ArrowDown: { x: 0, y: 10 },
+                      };
+                      if (delta[e.key]) {
+                        e.preventDefault();
+                        moveNode(node.id, {
+                          x: point.x + delta[e.key].x,
+                          y: point.y + delta[e.key].y,
+                        });
+                        persist();
+                      }
+                    }}
+                  >
+                    <title>{node.kind + ': ' + node.label}</title>
+                    <circle
+                      className="node-hit-target"
+                      cx={point.x}
+                      cy={point.y}
+                      r="18"
+                    />
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={
+                        node.kind === 'repository'
+                          ? 15
+                          : node.kind === 'account'
+                            ? 11
+                            : 6
+                      }
+                    />
+                    {labels[node.kind] && (
+                      <text
+                        x={point.x}
+                        y={point.y + (node.kind === 'repository' ? 32 : 26)}
+                        textAnchor="middle"
+                      >
+                        {node.label.length > 30
+                          ? node.label.slice(0, 28) + '…'
+                          : node.label}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
+          {!graph.nodes.length && (
+            <div className="graph-empty">
+              Open a workspace to see its connected brain.
+            </div>
+          )}
+          <div className="graph-help">
+            Drag a bubble to move it · drag the background to pan · scroll to
+            zoom <span>{Math.round(scale * 100)}%</span>
+          </div>
+        </div>
+        {controlsOpen && (
+          <aside
+            className="graph-controls"
+            id="brain-controls"
+            aria-label="Brain names and details"
+          >
+            <h3>Visible names</h3>
+            <p>Show or hide labels by type.</p>
+            <div className="graph-label-actions">
+              <button
+                onClick={() =>
+                  changeLabels(
+                    Object.fromEntries(
+                      graphKinds.map((k) => [k, true]),
+                    ) as Preferences['labels'],
+                  )
                 }
-                onClick={() => setSelected(n)}
-                role="button"
-                tabIndex={0}
-                aria-label={`${n.kind}: ${n.label}`}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') setSelected(n);
-                }}
               >
-                <circle
-                  cx={n.x}
-                  cy={n.y}
-                  r={
-                    n.kind === 'repository' ? 13 : n.kind === 'account' ? 10 : 7
+                Show all
+              </button>
+              <button
+                onClick={() =>
+                  changeLabels(
+                    Object.fromEntries(
+                      graphKinds.map((k) => [k, false]),
+                    ) as Preferences['labels'],
+                  )
+                }
+              >
+                Hide all
+              </button>
+            </div>
+            {graphKinds.map((kind) => (
+              <label className="graph-name-toggle" key={kind}>
+                <span className={'graph-key ' + kind}>●</span>
+                <span>{kind}</span>
+                <small>
+                  {graph.nodes.filter((n) => n.kind === kind).length}
+                </small>
+                <input
+                  type="checkbox"
+                  aria-label={'Show ' + kind + ' names'}
+                  checked={labels[kind]}
+                  onChange={(e) =>
+                    changeLabels({ ...labels, [kind]: e.target.checked })
                   }
                 />
-                <text x={n.x} y={(n.y || 0) + 25} textAnchor="middle">
-                  {n.label.length > 30 ? n.label.slice(0, 28) + '…' : n.label}
-                </text>
-              </g>
+              </label>
             ))}
-          </g>
-        </svg>
-        {!nodes.length && (
-          <div className="graph-empty">
-            Create a project to build its connected brain.
-            <br />
-            Nodes appear from real workspace records.
-          </div>
+            {selected && (
+              <div className="graph-node-details">
+                <div className="graph-details-heading">
+                  <h3>Node details</h3>
+                  <button
+                    aria-label="Close node details"
+                    onClick={() => setSelectedId('')}
+                  >
+                    ×
+                  </button>
+                </div>
+                <small>{selected.kind}</small>
+                <h4>{selected.label}</h4>
+                <pre>{selected.detail}</pre>
+                {selected.kind === 'agent' && (
+                  <button onClick={() => onAgent(selected.id)}>
+                    Open worker stream →
+                  </button>
+                )}
+                <h3>Connections</h3>
+                {graph.edges
+                  .filter(
+                    (e) => e.source === selected.id || e.target === selected.id,
+                  )
+                  .map((e) => (
+                    <p key={JSON.stringify(e)}>
+                      {graph.nodes.find((n) => n.id === e.source)?.label} →{' '}
+                      {e.kind} →{' '}
+                      {graph.nodes.find((n) => n.id === e.target)?.label}
+                    </p>
+                  ))}
+              </div>
+            )}
+          </aside>
         )}
       </div>
-      <div className="graph-legend">
-        {[
-          'repository',
-          'project',
-          'account',
-          'agent',
-          'task',
-          'branch',
-          'file',
-        ].map((k) => (
-          <span className={k} key={k}>
-            ● {k}
-          </span>
-        ))}
-        <small>
-          Drag canvas to pan · scroll to zoom · click a node to inspect
-        </small>
-      </div>
-      {selected && (
-        <aside className="graph-inspector">
-          <button onClick={() => setSelected(undefined)}>×</button>
-          <span>{selected.kind.toUpperCase()}</span>
-          <h2>{selected.label}</h2>
-          <pre>{selected.detail}</pre>
-          {selected.kind === 'agent' && (
-            <button onClick={() => onAgent(selected.id)}>
-              Open worker stream →
-            </button>
-          )}
-          <h3>Connections</h3>
-          {edges
-            .filter(
-              (e) => e.source.id === selected.id || e.target.id === selected.id,
-            )
-            .map((e, i) => (
-              <p key={i}>
-                {e.source.label} → {e.kind} → {e.target.label}
-              </p>
-            ))}
-        </aside>
-      )}
     </div>
   );
 }

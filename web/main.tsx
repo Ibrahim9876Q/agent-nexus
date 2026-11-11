@@ -9,6 +9,7 @@ import type {
   Message,
   Approval,
   Tables,
+  Chat,
 } from '../src/types';
 import { Brain } from './brain';
 import { AccountCapacity } from './AccountCapacity';
@@ -28,6 +29,7 @@ export type State = {
   messages: Message[];
   approvals: Approval[];
   commands: Tables['commands'][];
+  chats: Chat[];
 };
 let token = '';
 export async function api(path: string, body?: unknown) {
@@ -111,8 +113,11 @@ function App() {
   const [s, setS] = useState<State>(),
     [tab, setTab] = useState('Command'),
     [project, setProject] = useState(''),
+    [chatId, setChatId] = useState(''),
+    [editingChat, setEditingChat] = useState(''),
+    [chatTitleDraft, setChatTitleDraft] = useState(''),
     [target, setTarget] = useState('all'),
-    [prompt, setPrompt] = useState(''),
+    [drafts, setDrafts] = useState<Record<string, string>>({}),
     [mode, setMode] = useState('chat'),
     [error, setError] = useState(''),
     [connected, setConnected] = useState(false),
@@ -132,6 +137,27 @@ function App() {
     [shortcuts, setShortcuts] = useState(false),
     [sidebarOpen, setSidebarOpen] = useState(true),
     [busy, setBusy] = useState(false);
+  const draftKey = chatId || `new-${project}`;
+  const prompt = drafts[draftKey] || '';
+  const chatCatalog = (s?.chats || [])
+    .map((chat) => chat.id + ':' + chat.projectId)
+    .join('|');
+  const setPrompt = (value: string) =>
+    setDrafts((old) => ({ ...old, [draftKey]: value }));
+  useEffect(() => {
+    const chats = s?.chats?.filter((c) => c.projectId === project) || [];
+    if (chats.some((c) => c.id === chatId)) {
+      try {
+        localStorage.setItem(`nexus-chat-${project}`, chatId);
+      } catch {}
+      return;
+    }
+    let saved = '';
+    try {
+      saved = localStorage.getItem(`nexus-chat-${project}`) || '';
+    } catch {}
+    setChatId(chats.find((c) => c.id === saved)?.id || chats[0]?.id || '');
+  }, [project, chatCatalog, chatId]);
   const composerInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const input = composerInput.current;
@@ -211,16 +237,27 @@ function App() {
         {error}
       </div>
     );
-  const tasks = s.tasks.filter((t) => t.projectId === project),
-    agents = s.agents.filter((a) => a.projectId === project),
-    commands = s.commands.filter((c) => c.projectId === project),
+  const chats = (s.chats || []).filter((c) => c.projectId === project),
+    tasks = s.tasks.filter(
+      (t) => t.projectId === project && t.chatId === chatId,
+    ),
+    agents = s.agents.filter(
+      (a) => a.projectId === project && a.chatId === chatId,
+    ),
+    commands = s.commands.filter(
+      (c) => c.projectId === project && c.chatId === chatId,
+    ),
     visibleTasks = tasks.filter(
       (t) =>
         target === 'all' ||
         s.agents.find((a) => a.id === t.agentId)?.accountId === target,
     ),
     activeTask =
-      visibleTasks.find((t) => t.agentId === selected) || visibleTasks[0];
+      visibleTasks.find(
+        (t) => t.id === agents.find((a) => a.id === selected)?.taskId,
+      ) ||
+      visibleTasks.find((t) => t.status === 'running') ||
+      visibleTasks.at(-1);
   const ready = s.accounts.some((a) => a.status === 'ready');
   const form = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -230,17 +267,36 @@ function App() {
     if (busy || !prompt.trim() || !project || !ready) return;
     setBusy(true);
     try {
-      const result = await act(() =>
-        api('/command', {
+      let chosenChat = chatId;
+      const result = await act(async () => {
+        if (!chosenChat)
+          chosenChat = (await api('/chats', { projectId: project })).id;
+        return api('/command', {
           projectId: project,
+          chatId: chosenChat,
           text: prompt,
           mode,
           ...(target !== 'all' ? { accountId: target } : {}),
-        }),
-      );
-      if (result) setPrompt('');
+        });
+      });
+      if (result) {
+        setPrompt('');
+        setChatId(chosenChat);
+      }
     } finally {
       setBusy(false);
+    }
+  }
+  async function newChat() {
+    if (!project) return;
+    const chat = (await act(() => api('/chats', { projectId: project }))) as
+      Chat | undefined;
+    if (chat) {
+      setChatId(chat.id);
+      setTarget('all');
+      setSelected('');
+      setMode('chat');
+      setTab('Command');
     }
   }
   return (
@@ -293,7 +349,10 @@ function App() {
                   onChange={(e) => {
                     setProject(e.target.value);
                     setSelected('');
+                    setChatId('');
+                    setEditingChat('');
                     setTarget('all');
+                    setMode('chat');
                   }}
                 >
                   <option value="">No workspace open</option>
@@ -320,8 +379,9 @@ function App() {
                         }}
                       >
                         <i className={a.status === 'ready' ? 'ready' : ''} />
-                        {a.name}
-                        <small>{a.provider}</small>
+                        <span className="account-name" title={a.name}>
+                          {a.name}
+                        </span>
                       </button>
                       <AccountCapacity account={a} compact />
                     </div>
@@ -329,25 +389,116 @@ function App() {
                 </div>
               </>
             )}
-            {tasks.length > 0 && (
+            {project && (
               <>
-                <div className="explorer-label">
-                  Tasks <small>{tasks.length}</small>
+                <div className="explorer-label chat-heading">
+                  <span>
+                    Chats <small>{chats.length}</small>
+                  </span>
+                  <button
+                    className="icon-button"
+                    aria-label="New chat"
+                    title="New chat"
+                    onClick={() => void newChat()}
+                  >
+                    <Icon name="plus" />
+                  </button>
                 </div>
-                <div className="task-tree">
-                  {tasks.map((t) => (
+                <div className="chat-list">
+                  {[...chats]
+                    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+                    .map((chat) => (
+                      <div
+                        className={
+                          'chat-list-row' +
+                          (chatId === chat.id ? ' chosen' : '')
+                        }
+                        key={chat.id}
+                      >
+                        {editingChat === chat.id ? (
+                          <form
+                            className="chat-rename"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void act(async () => {
+                                await api('/chats/' + chat.id, {
+                                  title: chatTitleDraft,
+                                });
+                                setEditingChat('');
+                              });
+                            }}
+                          >
+                            <input
+                              aria-label="Chat name"
+                              value={chatTitleDraft}
+                              onChange={(e) =>
+                                setChatTitleDraft(e.target.value)
+                              }
+                              autoFocus
+                              maxLength={200}
+                              required
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  e.stopPropagation();
+                                  setEditingChat('');
+                                }
+                              }}
+                            />
+                            <button
+                              title="Save chat name"
+                              aria-label="Save chat name"
+                            >
+                              ✓
+                            </button>
+                          </form>
+                        ) : (
+                          <>
+                            <button
+                              className="chat-select"
+                              title={chat.title}
+                              aria-current={
+                                chatId === chat.id ? 'page' : undefined
+                              }
+                              onClick={() => {
+                                setChatId(chat.id);
+                                setTarget('all');
+                                setMode('chat');
+                                setEditingChat('');
+                                setSelected('');
+                                setTab('Command');
+                              }}
+                            >
+                              <Icon name="Command" />
+                              <span>{chat.title}</span>
+                              {s.tasks.some(
+                                (t) =>
+                                  t.chatId === chat.id &&
+                                  t.status === 'running',
+                              ) && <i className="ready" />}
+                            </button>
+                            <button
+                              className="chat-rename-button"
+                              aria-label={'Rename chat: ' + chat.title}
+                              title="Rename chat"
+                              onClick={() => {
+                                setEditingChat(chat.id);
+                                setChatTitleDraft(chat.title);
+                              }}
+                            >
+                              ✎
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  {!chats.length && (
                     <button
-                      key={t.id}
-                      className={activeTask?.id === t.id ? 'chosen' : ''}
-                      onClick={() => {
-                        setSelected(t.agentId);
-                        setTab('Agents');
-                      }}
+                      className="new-chat-empty"
+                      onClick={() => void newChat()}
                     >
-                      <span className={t.status}>●</span>
-                      {t.title}
+                      ＋ New chat
                     </button>
-                  ))}
+                  )}
                 </div>
               </>
             )}
@@ -413,7 +564,8 @@ function App() {
           )}
           <span>
             {project
-              ? s.projects.find((p) => p.id === project)?.name
+              ? chats.find((c) => c.id === chatId)?.title ||
+                s.projects.find((p) => p.id === project)?.name
               : tab === 'Command'
                 ? ''
                 : tab}
@@ -440,7 +592,17 @@ function App() {
           </div>
         )}
         {s.approvals
-          .filter((a) => a.status === 'pending')
+          .filter(
+            (a) =>
+              a.status === 'pending' &&
+              (!a.taskId ||
+                s.tasks.some(
+                  (task) =>
+                    task.id === a.taskId &&
+                    task.projectId === project &&
+                    task.chatId === chatId,
+                )),
+          )
           .map((a) => (
             <div className="approval" key={a.id}>
               <strong>Approval required · {a.description}</strong>
@@ -591,9 +753,12 @@ function App() {
         )}
         {tab === 'Brain' && (
           <Brain
+            key={project}
             state={s}
             projectId={project}
             onAgent={(id) => {
+              const agent = s.agents.find((a) => a.id === id);
+              if (agent?.chatId) setChatId(agent.chatId);
               setSelected(id);
               setTab('Agents');
             }}

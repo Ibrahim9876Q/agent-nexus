@@ -49,6 +49,14 @@ export type Account = {
   detail?: string;
 };
 export type Repo = { id: string; name: string; path: string };
+export type Chat = {
+  id: string;
+  projectId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  legacy?: boolean;
+};
 export type Project = {
   coordinatorAccountId?: string;
   id: string;
@@ -58,6 +66,7 @@ export type Project = {
   status: 'active' | 'paused';
 };
 export type Agent = {
+  chatId?: string;
   id: string;
   accountId: string;
   projectId: string;
@@ -72,6 +81,7 @@ export type Agent = {
   tokenUsageTotal?: TokenUsage;
 };
 export type Task = {
+  chatId?: string;
   commandId?: string;
   parentTaskId?: string;
   execution?: { model?: string; effort?: string; approvalMode: ApprovalMode };
@@ -140,6 +150,7 @@ export type Approval = {
 export type Event = { id: string; at: string; type: string; data: unknown };
 export interface Tables {
   commands: {
+    chatId?: string;
     id: string;
     projectId: string;
     text: string;
@@ -150,6 +161,7 @@ export interface Tables {
     taskIds?: string[];
   };
   accounts: Account;
+  chats: Chat;
   repos: Repo;
   projects: Project;
   agents: Agent;

@@ -16,6 +16,10 @@ The setting controls Codex execution. Separate publication/integration operation
 
 ## Conversation and delegation
 
+Each workspace supports multiple named chats. Create one with **＋** beside **Chats** and open it from the sidebar. The first prompt supplies its initial title; the pencil control allows a custom name. Draft text stays with its chat while switching. Commands, coordinator threads, planned/delegated tasks, and Nexus messages are scoped to the chat. Cross-chat messages and task dependencies are rejected. The repository, account configuration, capacity limits, and project pause/resume remain shared across the workspace.
+
+Older workspace history is migrated transactionally into one chat. Existing task outputs, Git branches/worktrees and Codex thread identifiers are preserved. Migration does not start AI work.
+
 **Chat** is the default. A message goes to the selected account's coordinator, or the workspace's coordinator when using the automatic destination. The model is instructed to answer greetings, questions, and discussion directly. Repository inspection and delegation are optional and should serve the request. This behavior is model-directed, not a hard-coded greeting/demo response.
 
 Subsequent messages reuse the coordinator's Codex thread and worktree. A message sent during active work steers that work. **Direct / override** remains available to explicitly direct all matching workers; **Plan new work** explicitly requests planning. The coordinator waits for planned/delegated work and receives its evidence before completing the final report.

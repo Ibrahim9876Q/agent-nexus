@@ -16,6 +16,8 @@ export class Bus {
       throw new Error(
         'Cross-project messages require an explicit integration; access denied',
       );
+    if (sender.chatId !== recipient.chatId)
+      throw new Error('Cross-chat messages are not allowed');
     if (JSON.stringify(payload).length > 20000)
       throw new Error('Message exceeds 20 KB');
     const old = this.store
