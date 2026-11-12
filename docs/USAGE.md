@@ -124,7 +124,7 @@ Select the project in the left sidebar. Enter a prompt, select its destination a
 | **Direct / override** | Sends a directive to existing workers in the selected project. Active turns receive steering; idle tasks queue continuation. With no matching workers, Nexus attempts to create a coordinator. |
 | **Plan new work**     | Creates a coordinator planning task under the selected account, or a ready Codex account when using the all-workers destination.                                                               |
 | **Pause project**     | Pauses scheduling and interrupts active turns for the whole selected project.                                                                                                                  |
-| **Resume scheduling** | Reactivates project scheduling. Interrupted tasks still require explicit resume in Agents.                                                                                                     |
+| **Resume scheduling** | Reactivates project scheduling and unfinished tasks. The Resume / continue button beside the composer resumes only the selected chat.                                                          |
 
 Examples:
 

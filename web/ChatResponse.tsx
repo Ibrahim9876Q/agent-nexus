@@ -15,43 +15,49 @@ export function ChatResponse({
   const primary =
     tasks.find((t) => command.taskIds?.includes(t.id)) || tasks[0];
   const summary = workSummary(tasks, state.agents, state.accounts);
-  const progress = tasks.flatMap((t) =>
-    (t.responseItems || [])
-      .filter((i) => i.phase === 'commentary')
-      .map((i) => ({ task: t, ...i })),
-  );
-  const thinking = tasks.filter((t) => t.reasoningSummary?.trim());
-  const active = tasks.some((t) =>
-    ['pending', 'running', 'blocked'].includes(t.status),
-  );
-  const answer = primary?.output;
-  if (!primary) return <p className="dispatch-status">{command.result}</p>;
+  const reply = command.reply;
+  const progress = reply?.progress || [];
+  const thinking = reply?.reasoningSummary;
+  const paused =
+    state.projects.find((p) => p.id === command.projectId)?.status ===
+      'paused' || primary?.recoveryHold;
+  const active =
+    !paused && !!reply && ['queued', 'thinking'].includes(reply.state);
+  const answer = reply?.text || (!reply ? primary?.output : '');
+  const label =
+    paused && reply && ['queued', 'thinking'].includes(reply.state)
+      ? 'Paused'
+      : reply?.state === 'thinking'
+        ? 'Thinking'
+        : reply?.state === 'queued'
+          ? 'Queued'
+          : reply?.state === 'waiting'
+            ? 'Waiting'
+            : reply?.state || primary?.status || 'Status';
   return (
-    <div className="assistant-response">
+    <div
+      className={'assistant-response' + (active ? ' is-thinking' : '')}
+      aria-busy={active}
+    >
       <div className="chat-author">
-        NEXUS <span>{active ? 'Working' : primary.status}</span>
+        NEXUS <span>{label}</span>
       </div>
-      {thinking.length > 0 && (
+      {thinking && (
         <details className="thinking-panel">
           <summary>Thinking summary</summary>
-          {thinking.map((t) => (
-            <div key={t.id}>
-              <small>{t.title}</small>
-              <p>{t.reasoningSummary}</p>
-            </div>
-          ))}
+          <p>{thinking}</p>
         </details>
       )}
       {progress.length > 0 && (
         <details className="thinking-panel">
           <summary>Working updates</summary>
-          {progress.map((item) => (
-            <p key={item.id}>{item.text}</p>
+          {progress.map((text, index) => (
+            <p key={index}>{text}</p>
           ))}
         </details>
       )}
       {answer ? (
-        <div className="answer-text">
+        <div className={'answer-text' + (active ? ' is-streaming' : '')}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -68,16 +74,25 @@ export function ChatResponse({
         </div>
       ) : (
         <p className="response-pending">
-          {primary.error ||
-            (active
-              ? 'Working on your message…'
-              : 'No answer text was reported. Open Agents for task details.')}
+          {reply?.error ||
+            (paused && reply && ['queued', 'thinking'].includes(reply.state)
+              ? 'Paused. Use Resume / continue below.'
+              : reply?.state === 'queued'
+                ? 'Queued for a separate reply…'
+                : reply?.state === 'thinking'
+                  ? 'Thinking…'
+                  : reply?.state === 'waiting'
+                    ? primary?.waitingReason || 'Waiting for worker results.'
+                    : command.result)}
         </p>
       )}
-      {answer && primary.error && <p className="failure">{primary.error}</p>}
-      {summary.rows.length > 0 && (
+      {answer && reply?.error && <p className="failure">{reply.error}</p>}
+      {summary.rows.length > 0 && !active && reply?.kind !== 'status' && (
         <div className="response-summary">
           <span>
+            {primary?.commandId && primary.commandId !== command.id
+              ? 'Job totals · '
+              : ''}
             {summary.accountsUsed}{' '}
             {summary.accountsUsed === 1 ? 'account' : 'accounts'} used ·{' '}
             {summary.hasUsage

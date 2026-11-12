@@ -58,6 +58,7 @@ export type Chat = {
   legacy?: boolean;
 };
 export type Project = {
+  pauseReason?: 'user' | 'restart';
   coordinatorAccountId?: string;
   id: string;
   repoId: string;
@@ -81,6 +82,12 @@ export type Agent = {
   tokenUsageTotal?: TokenUsage;
 };
 export type Task = {
+  replyCommandId?: string;
+  recoveryHold?: boolean;
+  waitingReason?: string;
+  runtimeStage?: string;
+  nextInput?: string;
+  turnActive?: boolean;
   chatId?: string;
   commandId?: string;
   parentTaskId?: string;
@@ -148,8 +155,27 @@ export type Approval = {
   taskId?: string;
 };
 export type Event = { id: string; at: string; type: string; data: unknown };
+export type ChatReply = {
+  legacyMissing?: boolean;
+  text: string;
+  state:
+    | 'queued'
+    | 'thinking'
+    | 'waiting'
+    | 'completed'
+    | 'failed'
+    | 'interrupted'
+    | 'paused';
+  reasoningSummary?: string;
+  progress?: string[];
+  error?: string;
+  updatedAt: string;
+  kind?: 'status' | 'assistant';
+};
 export interface Tables {
   commands: {
+    reply?: ChatReply;
+    queued?: boolean;
     chatId?: string;
     id: string;
     projectId: string;

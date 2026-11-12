@@ -22,7 +22,11 @@ Older workspace history is migrated transactionally into one chat. Existing task
 
 **Chat** is the default. A message goes to the selected account's coordinator, or the workspace's coordinator when using the automatic destination. The model is instructed to answer greetings, questions, and discussion directly. Repository inspection and delegation are optional and should serve the request. This behavior is model-directed, not a hard-coded greeting/demo response.
 
-Subsequent messages reuse the coordinator's Codex thread and worktree. A message sent during active work steers that work. **Direct / override** remains available to explicitly direct all matching workers; **Plan new work** explicitly requests planning. The coordinator waits for planned/delegated work and receives its evidence before completing the final report.
+Subsequent messages reuse the coordinator's Codex thread and worktree. Each user message has its own saved assistant reply. Messages submitted while the coordinator is running queue for a separate reply after that turn. Earlier replies remain visible when new turns start. **Direct / override** explicitly steers matching workers; **Plan new work** explicitly requests planning. The coordinator waits for planned/delegated work and receives its evidence before completing the final report.
+
+The send button shows animated dots while work is active. A live status line shows thinking, writing, tool activity, queue, approval, and pause states. Partial text is muted while streaming and returns to normal contrast when the turn completes. **Stop** interrupts this chat and cancels queued replies. **Resume / continue** resumes unfinished work in this chat; typing “resume scheduling” or `/resume` also performs that action.
+
+Restart does not start inference by itself. New input resumes restart-held work in its selected chat while leaving other chats held. A deliberate project pause stays paused until explicitly resumed. Request-type coordination messages such as `WORK_REQUEST`, `preview_request`, and `revision_request` wake completed workers. Informational messages do not restart finished work. New continuations send new input and unread coordination messages rather than repeating the entire accumulated user prompt.
 
 ## Answers, summaries, and usage
 
@@ -32,7 +36,7 @@ The response footer reports the number of accounts that actually started work. *
 
 Token totals come from provider-reported thread usage, subtracting the captured baseline for each turn. Repeated updates replace the same turn's count. Cached input and reasoning output are already included in the provider's total and are not added again. Missing or unattributable usage is explicitly unavailable; partial totals are marked. Native runtime children without separate Nexus task/usage records are not separately itemized. A directive that steers an existing job shows that job's totals, not an invented per-message split.
 
-Old saved messages without phase or usage metadata remain readable; missing history is not reconstructed or guessed.
+Old saved messages without phase or usage metadata remain readable. When available, public assistant messages are recovered through Codex's saved turn history and paired with recorded user inputs. Raw reasoning is not imported. If an old reply cannot be recovered, the UI says it was not separately saved. New replies are saved directly with their user message.
 
 ## Verification
 

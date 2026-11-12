@@ -131,6 +131,14 @@ export async function createNexusServer(
       .parse(req.body);
     res.json(engine.renameChat(req.params.id, v.title));
   });
+  app.post('/api/chats/:id/resume', (req, res) => {
+    engine.resumeChat(req.params.id);
+    res.json({ ok: true });
+  });
+  app.post('/api/chats/:id/stop', async (req, res) => {
+    await engine.stopChat(req.params.id);
+    res.json({ ok: true });
+  });
   app.post('/api/accounts', (req, res) => {
     if (
       (!mock && req.body.provider !== 'codex') ||

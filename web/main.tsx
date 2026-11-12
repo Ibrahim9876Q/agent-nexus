@@ -10,11 +10,13 @@ import type {
   Approval,
   Tables,
   Chat,
+  Delivery,
 } from '../src/types';
 import { Brain } from './brain';
 import { AccountCapacity } from './AccountCapacity';
 import { AccountSettings } from './AccountSettings';
 import { ChatResponse } from './ChatResponse';
+import { chatActivity } from '../src/chat-activity';
 import '@fontsource/jetbrains-mono/latin-400.css';
 import '@fontsource/jetbrains-mono/latin-500.css';
 import '@fontsource/jetbrains-mono/latin-600.css';
@@ -30,6 +32,7 @@ export type State = {
   approvals: Approval[];
   commands: Tables['commands'][];
   chats: Chat[];
+  deliveries?: Delivery[];
 };
 let token = '';
 export async function api(path: string, body?: unknown) {
@@ -109,6 +112,15 @@ function Icon({ name }: { name: string }) {
     </svg>
   );
 }
+function WorkingDots() {
+  return (
+    <span className="working-dots" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
 function App() {
   const [s, setS] = useState<State>(),
     [tab, setTab] = useState('Command'),
@@ -136,7 +148,8 @@ function App() {
     }),
     [shortcuts, setShortcuts] = useState(false),
     [sidebarOpen, setSidebarOpen] = useState(true),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [now, setNow] = useState(Date.now());
   const draftKey = chatId || `new-${project}`;
   const prompt = drafts[draftKey] || '';
   const chatCatalog = (s?.chats || [])
@@ -158,6 +171,22 @@ function App() {
     } catch {}
     setChatId(chats.find((c) => c.id === saved)?.id || chats[0]?.id || '');
   }, [project, chatCatalog, chatId]);
+  const chatScroll = useRef<HTMLDivElement>(null);
+  const pinnedToBottom = useRef(true);
+  useEffect(() => {
+    pinnedToBottom.current = true;
+    chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight });
+  }, [chatId]);
+  useEffect(() => {
+    if (pinnedToBottom.current && chatScroll.current)
+      chatScroll.current.scrollTop = chatScroll.current.scrollHeight;
+  }, [s?.commands, s?.tasks, tab]);
+  useEffect(() => {
+    if (!s?.tasks.some((t) => t.status === 'running' || t.status === 'pending'))
+      return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [s?.tasks.some((t) => t.status === 'running' || t.status === 'pending')]);
   const composerInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const input = composerInput.current;
@@ -259,6 +288,8 @@ function App() {
       visibleTasks.find((t) => t.status === 'running') ||
       visibleTasks.at(-1);
   const ready = s.accounts.some((a) => a.status === 'ready');
+  const activity = chatActivity(s, chatId, now);
+  const working = busy || activity.busy;
   const form = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     return Object.fromEntries(new FormData(e.currentTarget));
@@ -628,7 +659,18 @@ function App() {
           ))}
         {tab === 'Command' && (
           <div className={'command-view' + (!commands.length ? ' empty' : '')}>
-            <div className="chat-scroll">
+            <div
+              className="chat-scroll"
+              ref={chatScroll}
+              onScroll={(e) => {
+                const element = e.currentTarget;
+                pinnedToBottom.current =
+                  element.scrollHeight -
+                    element.scrollTop -
+                    element.clientHeight <
+                  100;
+              }}
+            >
               {!commands.length && (
                 <div className="welcome">
                   <div className="welcome-logo">
@@ -647,30 +689,60 @@ function App() {
                   )}
                 </div>
               )}
-              {commands.map((c, index) => (
-                <div className="exchange" key={c.id}>
+              {commands.map((c) => (
+                <div
+                  className={
+                    'exchange' +
+                    (c.reply && ['queued', 'thinking'].includes(c.reply.state)
+                      ? ' is-pending'
+                      : '')
+                  }
+                  key={c.id}
+                >
                   <div className="chat-author">
                     YOU <span>{new Date(c.at).toLocaleTimeString()}</span>
                   </div>
                   <p>{c.text}</p>
-                  {!commands
-                    .slice(index + 1)
-                    .some(
-                      (later) =>
-                        c.taskIds?.[0] && later.taskIds?.includes(c.taskIds[0]),
-                    ) && <ChatResponse command={c} state={s} />}
+                  <ChatResponse command={c} state={s} />
                 </div>
               ))}
             </div>
+            {(working || (chatId && activity.state !== 'idle')) && (
+              <div
+                className={'live-work-status ' + activity.state}
+                role="status"
+                aria-live="polite"
+              >
+                <span className="live-work-label">
+                  {working && <WorkingDots />}
+                  <span>{busy ? 'Sending your message…' : activity.text}</span>
+                </span>
+                <div className="live-work-actions">
+                  {['paused', 'waiting', 'stalled'].includes(
+                    activity.state,
+                  ) && (
+                    <button
+                      onClick={() =>
+                        void act(() => api('/chats/' + chatId + '/resume', {}))
+                      }
+                    >
+                      Resume / continue
+                    </button>
+                  )}
+                  {activity.canStop && (
+                    <button
+                      aria-label="Stop work in this chat"
+                      onClick={() =>
+                        void act(() => api('/chats/' + chatId + '/stop', {}))
+                      }
+                    >
+                      ■ Stop
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="composer">
-              {project &&
-                s.projects.find((p) => p.id === project)?.status ===
-                  'paused' && (
-                  <p className="setup-required">
-                    Scheduling is paused. Choose “Resume scheduling” to
-                    continue. Interrupted tasks still require Resume in Agents.
-                  </p>
-                )}
               {project && !ready && (
                 <p className="setup-required">
                   Sign into a Codex account in workspace setup to start real
@@ -704,13 +776,23 @@ function App() {
                     : 'Connect a workspace to send a prompt'}
                 </span>
                 <button
-                  className="accent send-button"
-                  aria-label="Send instruction"
-                  title="Send instruction (Ctrl+Enter)"
+                  className={
+                    'accent send-button' + (working ? ' is-working' : '')
+                  }
+                  aria-label={
+                    working
+                      ? 'Queue a message while work continues'
+                      : 'Send instruction'
+                  }
+                  title={
+                    working
+                      ? 'Work is in progress. Send a follow-up for a separate reply.'
+                      : 'Send instruction (Enter)'
+                  }
                   disabled={busy || !project || !ready || !prompt.trim()}
                   onClick={() => void send()}
                 >
-                  <Icon name="send" />
+                  {working ? <WorkingDots /> : <Icon name="send" />}
                 </button>
               </div>
             </div>
