@@ -8,17 +8,19 @@ Command, Brain, and Agents live only in the sidebar. Its panel button or Ctrl+B 
 
 We reviewed [TeamClaude](https://github.com/KarpelesLab/teamclaude), particularly its [routing](https://github.com/KarpelesLab/teamclaude/blob/master/docs/routing.md) and [quota](https://github.com/KarpelesLab/teamclaude/blob/master/docs/quota.md) design notes. Useful ideas were account-level admission controls, explicit health/capacity visibility, and avoiding a burst of simultaneous worker starts.
 
-Nexus implements those ideas in its existing scheduler and official Codex app-server adapter. No TeamClaude source was copied and no proxy dependency was introduced. Account identity, credentials and resumable threads stay bound to the original account. Nexus does not pool credentials, transparently rotate requests on quota, intercept TLS, or impersonate another account.
+Nexus implements those ideas in its existing scheduler and official Codex app-server adapter. No TeamClaude source was copied and no proxy dependency was introduced. Credentials and provider threads stay bound to their authenticated account. Workspace usage recovery can transfer a stopped logical worker to another connected account using a fresh provider thread and a local public-context checkpoint. Credentials and opaque thread state are never copied between accounts.
 
 ## Capacity and draining
 
 - Verification reads supported `account/rateLimits/read` telemetry. `account/rateLimits/updated` notifications merge sparse windows. A complete refresh can clear absent windows.
 - Each window shows the percentage used, provider-reported duration, observation time, and reset time when known. Unknown readings stay unknown; they are never rendered as 0% used.
-- Reported exhausted windows with a future or unknown reset stop new admissions for that account. A reported elapsed reset no longer holds the account. Stale observations remain timestamped; the provider remains authoritative.
+- Reported exhausted windows with a future or unknown reset stop new admissions for that account. With usage recovery enabled, a reset timestamp alone does not restart work: a fresh reading below the 95% reserve is required. Stale observations remain timestamped; the provider remains authoritative.
 - **Drain account** stops new assignments without interrupting active work. **Enable new work** lifts that manual gate; authentication, quotas and cooldowns still apply.
 - Real Codex task starts on the same account are spaced by at least 750 ms while global and per-account concurrency caps continue to apply.
-- Explicit runtime `rateLimitExceeded` failures place the same account into a local 60-second admission cooldown; `serverOverloaded` uses 15 seconds. These are local pacing intervals, not guessed provider reset times. Failed turns are not silently retried or transferred to another account.
+- Explicit runtime `rateLimitExceeded` and `usageLimitExceeded` failures place the same account into a local 60-second admission cooldown; `serverOverloaded` uses 15 seconds. These are local pacing intervals, not guessed provider reset times. Usage-limit failures enter a visible checkpoint/wait state when workspace recovery is enabled. Other failures still require inspection and explicit retry.
 - Capacity can be refreshed in account setup. Some authentication/provider modes do not expose quota telemetry; their capacity remains unknown.
+
+Usage recovery saves public conversation/task/message context in local `handoffs/<id>/context.json` and a private Git checkpoint ref. It preserves the worktree, branch, staged files, and the stricter approval policy. An alternate account uses a new authenticated thread; the logical worker ID remains stable so queued messages and dependencies still address the same work. See [recovery details](IMAGES_AND_RECOVERY.md).
 
 ## Runtime activity
 

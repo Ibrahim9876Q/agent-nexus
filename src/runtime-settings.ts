@@ -9,6 +9,7 @@ export const settingsSchema = z
   })
   .strict();
 export const modelSchema = z.object({
+  inputModalities: z.array(z.string()).optional(),
   id: z.string(),
   model: z.string(),
   displayName: z.string(),

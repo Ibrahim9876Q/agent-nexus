@@ -9,7 +9,11 @@ export function AccountCapacity({
   compact?: boolean;
 }) {
   const windows = [account.capacity?.primary, account.capacity?.secondary];
-  const reason = admissionReason(account);
+  const reason =
+    admissionReason(account) ||
+    (windows.some((window) => window && window.usedPercent >= 95)
+      ? 'Reported usage ≥95%'
+      : undefined);
   const observed = account.capacity
     ? new Date(account.capacity.observedAt).toLocaleTimeString()
     : 'unavailable';

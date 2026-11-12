@@ -110,6 +110,35 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       path.join(thread.cwd, 'runtime-params.json'),
       JSON.stringify({ thread: threadOptions, turn: turnOptions }),
     );
+    if (m.params.input[0].text.startsWith('EXERCISE_USAGE_LIMIT')) {
+      return send({
+        method: 'turn/completed',
+        params: {
+          threadId: thread.id,
+          turn: {
+            id: turnId,
+            status: 'failed',
+            error: {
+              message: 'Fixture quota exhausted',
+              codexErrorInfo: 'usageLimitExceeded',
+            },
+          },
+        },
+      });
+    }
+    if (m.params.input[0].text.startsWith('EXERCISE_QUOTA')) {
+      return send({
+        method: 'account/rateLimits/updated',
+        params: {
+          rateLimits: {
+            primary: {
+              usedPercent: 95,
+              resetsAt: Math.floor(Date.now() / 1000) + 3600,
+            },
+          },
+        },
+      });
+    }
     if (m.params.input[0].text.includes('EXERCISE_APPROVAL')) {
       waitingApproval = true;
       return send({
@@ -253,6 +282,16 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       params: {
         threadId: thread.id,
         turn: { id: turnId, status: 'completed' },
+      },
+    });
+  }
+  if (m.method === 'turn/interrupt') {
+    result(m.id, {});
+    return send({
+      method: 'turn/completed',
+      params: {
+        threadId: thread.id,
+        turn: { id: turnId, status: 'interrupted' },
       },
     });
   }

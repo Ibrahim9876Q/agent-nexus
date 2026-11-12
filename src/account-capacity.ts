@@ -17,7 +17,7 @@ export function capacityUpdate(
 ): Account {
   const parsed = snapshotSchema.parse(input);
   const previous = account.capacity;
-  return {
+  const updated: Account = {
     ...account,
     capacity: {
       primary: parsed.primary ?? (sparse ? previous?.primary : undefined),
@@ -26,6 +26,18 @@ export function capacityUpdate(
     },
     capacityError: undefined,
   };
+  const windows = [
+    updated.capacity?.primary,
+    updated.capacity?.secondary,
+  ].filter(Boolean);
+  if (
+    updated.usageBlockedAt &&
+    now >= updated.usageBlockedAt &&
+    windows.length &&
+    windows.every((window) => window!.usedPercent < 95)
+  )
+    updated.usageBlockedAt = undefined;
+  return updated;
 }
 export function admissionReason(
   account: Account,
@@ -34,12 +46,13 @@ export function admissionReason(
   if (account.enabled === false) return 'draining';
   if (account.status !== 'ready') return account.status;
   if (account.cooldownUntil && account.cooldownUntil > now) return 'cooldown';
+  if (account.usageBlockedAt) return 'quota reached';
   for (const w of [account.capacity?.primary, account.capacity?.secondary])
     if (w && w.usedPercent >= 100 && (!w.resetsAt || w.resetsAt * 1000 > now))
       return 'quota reached';
 }
 export function backoffUntil(code: unknown, now = Date.now()) {
-  return code === 'rateLimitExceeded'
+  return code === 'rateLimitExceeded' || code === 'usageLimitExceeded'
     ? now + 60000
     : code === 'serverOverloaded'
       ? now + 15000

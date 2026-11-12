@@ -439,3 +439,93 @@ test('activity distinguishes thinking, tools, approval, pause, waiting and compl
     store.close();
   }
 });
+
+test('custom worker replies wake a finished coordinator and blocked workers report their reason once', async () => {
+  const store = new Store(':memory:');
+  const engine = new Engine(store, tmpdir(), {
+    execute: async (task, agent, e) => {
+      for (const message of e.bus.inbox(agent.id))
+        e.bus.ack(agent.id, message.id);
+      if (agent.role !== 'coordinator') {
+        e.bus.send(
+          agent.id,
+          store.get('tasks', task.parentTaskId!).agentId,
+          'source_artifact',
+          'Corrected source files',
+        );
+        await e.tool(agent.id, 'nexus_wait', {
+          reason: 'Preview blocked by host policy; awaiting acknowledgement',
+        });
+        return 'Corrected files sent; preview unavailable';
+      }
+      return 'Received the files and surfaced the preview blocker';
+    },
+  });
+  try {
+    const { a, project, chat } = seed(engine);
+    const command = await engine.command({
+      projectId: project.id,
+      chatId: chat.id,
+      text: 'Continue preview',
+    });
+    const parent = store.get('tasks', command.taskIds![0]);
+    const child = engine.plan(parent.agentId, {
+      tasks: [
+        {
+          key: 'preview',
+          accountId: a.id,
+          role: 'implementer',
+          title: 'Preview',
+          prompt: 'Preview',
+          dependencies: [],
+        },
+      ],
+    })[0];
+    for (const task of [parent, child]) {
+      store.put('tasks', {
+        ...task,
+        status: 'completed',
+        attempts: 1,
+        worktree: tmpdir(),
+      });
+      store.put('agents', {
+        ...store.get('agents', task.agentId),
+        status: 'completed',
+      });
+    }
+    engine.bus.send(
+      parent.agentId,
+      child.agentId,
+      'revision_request',
+      'Fix the source files',
+    );
+    await engine.tick();
+    await waitFor(() => store.get('tasks', child.id).status === 'blocked');
+    assert.equal(
+      store.all('messages').filter((m) => m.type === 'BLOCKED').length,
+      1,
+    );
+    assert.match(
+      JSON.stringify(
+        store.all('messages').find((m) => m.type === 'BLOCKED')!.payload,
+      ),
+      /host policy/,
+    );
+    await engine.tick();
+    await waitFor(() => store.get('tasks', parent.id).attempts === 2);
+    assert.match(
+      store.get('commands', command.id).reply!.text,
+      /surfaced the preview blocker/,
+    );
+    await engine.tick();
+    await delay();
+    assert.equal(store.get('tasks', child.id).attempts, 2);
+    assert.equal(
+      store.all('messages').filter((m) => m.type === 'BLOCKED').length,
+      1,
+    );
+  } finally {
+    await engine.stop();
+    store.close();
+  }
+});

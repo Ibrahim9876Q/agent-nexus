@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Account, ApprovalMode } from '../src/types';
-import { api } from './main';
+import { api } from './api';
 
 export function AccountSettings({
   account,

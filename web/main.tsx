@@ -11,8 +11,11 @@ import type {
   Tables,
   Chat,
   Delivery,
+  Attachment,
 } from '../src/types';
 import { Brain } from './brain';
+import { api, setSessionToken } from './api';
+import { ImageAttachment } from './ImageAttachment';
 import { AccountCapacity } from './AccountCapacity';
 import { AccountSettings } from './AccountSettings';
 import { ChatResponse } from './ChatResponse';
@@ -33,18 +36,9 @@ export type State = {
   commands: Tables['commands'][];
   chats: Chat[];
   deliveries?: Delivery[];
+  attachments?: Attachment[];
 };
-let token = '';
-export async function api(path: string, body?: unknown) {
-  const r = await fetch('/api' + path, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Nexus-Token': token },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const v = await r.json();
-  if (!r.ok) throw new Error(v.error || 'Request failed');
-  return v;
-}
+export { api } from './api';
 function NexusLogo() {
   return (
     <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
@@ -149,9 +143,15 @@ function App() {
     [shortcuts, setShortcuts] = useState(false),
     [sidebarOpen, setSidebarOpen] = useState(true),
     [busy, setBusy] = useState(false),
-    [now, setNow] = useState(Date.now());
+    [now, setNow] = useState(Date.now()),
+    [imageDrafts, setImageDrafts] = useState<Record<string, string[]>>({}),
+    [uploading, setUploading] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null);
+  const currentChat = useRef(chatId);
+  currentChat.current = chatId;
   const draftKey = chatId || `new-${project}`;
   const prompt = drafts[draftKey] || '';
+  const images = imageDrafts[draftKey] || [];
   const chatCatalog = (s?.chats || [])
     .map((chat) => chat.id + ':' + chat.projectId)
     .join('|');
@@ -224,7 +224,8 @@ function App() {
       timer: ReturnType<typeof setTimeout>;
     async function connect() {
       try {
-        token = (await (await fetch('/api/session')).json()).token;
+        const token = (await (await fetch('/api/session')).json()).token;
+        setSessionToken(token);
         const v = await api('/state');
         if (dead) return;
         setS(v);
@@ -295,7 +296,14 @@ function App() {
     return Object.fromEntries(new FormData(e.currentTarget));
   };
   async function send() {
-    if (busy || !prompt.trim() || !project || !ready) return;
+    if (
+      busy ||
+      uploading ||
+      (!prompt.trim() && !images.length) ||
+      !project ||
+      !ready
+    )
+      return;
     setBusy(true);
     try {
       let chosenChat = chatId;
@@ -306,16 +314,57 @@ function App() {
           projectId: project,
           chatId: chosenChat,
           text: prompt,
+          attachmentIds: images,
           mode,
           ...(target !== 'all' ? { accountId: target } : {}),
         });
       });
       if (result) {
         setPrompt('');
+        setImageDrafts((old) => ({ ...old, [draftKey]: [] }));
         setChatId(chosenChat);
       }
     } finally {
       setBusy(false);
+    }
+  }
+  async function attachImages(files: File[]) {
+    if (!project || uploading) return;
+    if (files.length + images.length > 8) {
+      setError('Attach up to 8 images per message.');
+      return;
+    }
+    setUploading(true);
+    const originalChat = chatId;
+    let chosenChat = chatId;
+    try {
+      await act(async () => {
+        if (!chosenChat)
+          chosenChat = (await api('/chats', { projectId: project })).id;
+        for (const file of files) {
+          if (file.size > 10 * 1024 * 1024)
+            throw new Error('Images must be at most 10 MB each.');
+          const encoded = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).split(',')[1]);
+            reader.onerror = () => reject(new Error('Could not read image'));
+            reader.readAsDataURL(file);
+          });
+          const image = await api('/attachments', {
+            projectId: project,
+            chatId: chosenChat,
+            name: file.name,
+            base64: encoded,
+          });
+          setImageDrafts((old) => ({
+            ...old,
+            [chosenChat]: [...(old[chosenChat] || []), image.id],
+          }));
+        }
+      });
+      if (currentChat.current === originalChat) setChatId(chosenChat);
+    } finally {
+      setUploading(false);
     }
   }
   async function newChat() {
@@ -702,6 +751,20 @@ function App() {
                   <div className="chat-author">
                     YOU <span>{new Date(c.at).toLocaleTimeString()}</span>
                   </div>
+                  {(c.attachmentIds?.length || 0) > 0 && (
+                    <div className="attachment-list">
+                      {c.attachmentIds?.map((id) => {
+                        const attachment = s.attachments?.find(
+                          (a) => a.id === id,
+                        );
+                        return (
+                          attachment && (
+                            <ImageAttachment key={id} attachment={attachment} />
+                          )
+                        );
+                      })}
+                    </div>
+                  )}
                   <p>{c.text}</p>
                   <ChatResponse command={c} state={s} />
                 </div>
@@ -742,12 +805,44 @@ function App() {
                 </div>
               </div>
             )}
-            <div className="composer">
+            <div
+              className="composer"
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                if (e.dataTransfer.files.length) {
+                  e.preventDefault();
+                  void attachImages(Array.from(e.dataTransfer.files));
+                }
+              }}
+            >
               {project && !ready && (
                 <p className="setup-required">
                   Sign into a Codex account in workspace setup to start real
                   work.
                 </p>
+              )}
+              {images.length > 0 && (
+                <div className="attachment-list">
+                  {images.map((id) => {
+                    const attachment = s.attachments?.find((a) => a.id === id);
+                    return (
+                      attachment && (
+                        <ImageAttachment
+                          key={id}
+                          attachment={attachment}
+                          onRemove={() =>
+                            setImageDrafts((old) => ({
+                              ...old,
+                              [draftKey]: images.filter((key) => key !== id),
+                            }))
+                          }
+                        />
+                      )
+                    );
+                  })}
+                </div>
               )}
               <textarea
                 ref={composerInput}
@@ -758,6 +853,13 @@ function App() {
                 }
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
+                onPaste={(e) => {
+                  const files = Array.from(e.clipboardData.files);
+                  if (files.length) {
+                    e.preventDefault();
+                    void attachImages(files);
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (
                     e.key === 'Enter' &&
@@ -770,10 +872,34 @@ function App() {
                 }}
               />
               <div className="composer-bottom">
+                <input
+                  type="file"
+                  ref={imageInput}
+                  hidden
+                  multiple
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    if (e.target.files?.length)
+                      void attachImages(Array.from(e.target.files));
+                    e.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  className="attach-button"
+                  aria-label="Attach images"
+                  title="Attach images (PNG, JPEG, WebP)"
+                  disabled={!project || uploading}
+                  onClick={() => imageInput.current?.click()}
+                >
+                  <Icon name="plus" />
+                </button>
                 <span>
-                  {project
-                    ? 'Enter to send · Shift+Enter for a new line'
-                    : 'Connect a workspace to send a prompt'}
+                  {uploading
+                    ? 'Uploading image…'
+                    : project
+                      ? 'Enter to send · Shift+Enter for a new line'
+                      : 'Connect a workspace to send a prompt'}
                 </span>
                 <button
                   className={
@@ -789,7 +915,13 @@ function App() {
                       ? 'Work is in progress. Send a follow-up for a separate reply.'
                       : 'Send instruction (Enter)'
                   }
-                  disabled={busy || !project || !ready || !prompt.trim()}
+                  disabled={
+                    busy ||
+                    uploading ||
+                    !project ||
+                    !ready ||
+                    (!prompt.trim() && !images.length)
+                  }
                   onClick={() => void send()}
                 >
                   {working ? <WorkingDots /> : <Icon name="send" />}
@@ -1040,6 +1172,53 @@ function App() {
               Connect each account separately using official Codex sign-in.
               Complete the secure login in your browser, then verify here.
             </p>
+            {project &&
+              (() => {
+                const workspace = s.projects.find((p) => p.id === project)!;
+                return (
+                  <section className="usage-settings">
+                    <h3>Usage recovery</h3>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={workspace.autoResumeUsage !== false}
+                        onChange={(e) =>
+                          void act(() =>
+                            api(`/projects/${project}/usage-recovery`, {
+                              autoResumeUsage: e.target.checked,
+                              autoHandoffUsage:
+                                workspace.autoHandoffUsage !== false,
+                            }),
+                          )
+                        }
+                      />{' '}
+                      Save at 95% usage and resume when capacity returns
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={workspace.autoHandoffUsage !== false}
+                        disabled={workspace.autoResumeUsage === false}
+                        onChange={(e) =>
+                          void act(() =>
+                            api(`/projects/${project}/usage-recovery`, {
+                              autoResumeUsage:
+                                workspace.autoResumeUsage !== false,
+                              autoHandoffUsage: e.target.checked,
+                            }),
+                          )
+                        }
+                      />{' '}
+                      Continue with another available account
+                    </label>
+                    <p>
+                      Uses reported Codex limits. Checkpoints and conversation
+                      context stay in local Nexus storage. Manual pauses and
+                      Stop stay paused.
+                    </p>
+                  </section>
+                );
+              })()}
             <h3>01 / Accounts</h3>
             {s.accounts.map((a) => (
               <div className="setup-account" key={a.id}>

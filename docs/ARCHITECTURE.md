@@ -1,6 +1,6 @@
 # Architecture
 
-The dashboard and API run in one local Node process. Every real account owns a separate official Codex app-server process over stdio. A worker identity corresponds to one resumable thread. Worker-level children get separate threads and worktrees; native research children are runtime-managed and communicate externally through their parent.
+The dashboard and API run in one local Node process. Every real account owns a separate official Codex app-server process over stdio. A logical worker normally owns one resumable provider thread; usage handoff keeps the worker identity but creates a fresh thread under the destination account. Worker-level children get separate threads and worktrees; native research children are runtime-managed and communicate externally through their parent.
 
 Normal launches use the live installation, with no seeded data or mock execution. Optional scripted testing requires `npm run mock:desktop`, uses a different database and app instance, and is visibly labeled. Opening a project creates no agents or tasks; the user's first prompt starts planning. Persisted projects restart paused, so account reauthentication cannot silently resume queued work. Native executable discovery and login errors surface in account setup.
 
@@ -39,6 +39,12 @@ An active worker receives supported `turn/steer` input. Failed/no-active-turn de
 ## Git integration
 
 Every coding worker gets `nexus/<task UUID>` and a separate worktree based on repository HEAD. Dependent artifacts are referenced, not silently applied. Change inspection precedes user-requested local commits. Draft-PR creation requires an approval record and uses argument arrays plus a body file. GitHub operations use the user's existing GitHub CLI identity. Default branches are never merged or force-pushed by Nexus.
+
+## Images and usage checkpoints
+
+Authenticated attachment routes store PNG/JPEG/WebP bytes separately from SQLite metadata and WebSocket snapshots. Attachment IDs are scoped to a project and chat. Chat and steering requests turn those IDs into official Codex `localImage` inputs; previews use authenticated blob fetches.
+
+The scheduler observes provider usage windows and usage-limit errors. At the 95% reserve it requests interruption, waits for turn completion, and saves a Git snapshot with an alternate index and private ref. Public conversation, task reports, messages, and attachment references go to a local context manifest. The logical worker and task keep their identity, worktree and dependencies; an eligible alternate account starts a new thread with that context. Approval restrictions cannot become more permissive. Source token baselines are not reused by the destination. With no eligible alternate, fresh provider capacity is polled once a minute. Manual pause, Stop, restart holds, account drain and concurrency limits remain effective. Recovery never publishes to GitHub or transfers sign-in credentials.
 
 ## Runtime version boundary
 

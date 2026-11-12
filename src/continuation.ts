@@ -26,11 +26,7 @@ export function requestedResult(
   messages: Message[],
   tasks: Task[],
 ) {
-  if (
-    !['TASK_COMPLETED', 'BLOCKED'].includes(message.type) ||
-    recipient.role !== 'coordinator'
-  )
-    return false;
+  if (recipient.role !== 'coordinator') return false;
   const child = tasks.find((t) => t.id === message.taskId);
   return (
     child?.parentTaskId === task.id &&

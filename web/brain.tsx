@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { State } from './main';
-import { api } from './main';
+import { api } from './api';
 import {
   graphCenter,
   graphKinds,

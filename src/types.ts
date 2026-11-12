@@ -1,4 +1,5 @@
 export type ModelOption = {
+  inputModalities?: string[];
   id: string;
   model: string;
   displayName: string;
@@ -17,6 +18,7 @@ export type TokenUsage = {
   reasoningOutputTokens: number;
 };
 export type Account = {
+  usageBlockedAt?: number;
   model?: string | null;
   effort?: string | null;
   approvalMode?: ApprovalMode;
@@ -57,7 +59,19 @@ export type Chat = {
   updatedAt: string;
   legacy?: boolean;
 };
+export type Attachment = {
+  id: string;
+  projectId: string;
+  chatId: string;
+  name: string;
+  mime: string;
+  size: number;
+  path: string;
+  createdAt: string;
+};
 export type Project = {
+  autoResumeUsage?: boolean;
+  autoHandoffUsage?: boolean;
   pauseReason?: 'user' | 'restart';
   coordinatorAccountId?: string;
   id: string;
@@ -82,12 +96,32 @@ export type Agent = {
   tokenUsageTotal?: TokenUsage;
 };
 export type Task = {
+  quotaRecovery?: {
+    state: 'stopping' | 'waiting';
+    reason: string;
+    checkpoint?: string;
+    error?: string;
+  };
+  handoffContext?: string;
+  approvalCeiling?: ApprovalMode;
+  handoffs?: {
+    fromAccountId: string;
+    toAccountId: string;
+    at: string;
+    checkpoint: string;
+    tokens?: number;
+    model?: string;
+    effort?: string;
+    used?: boolean;
+  }[];
+  attachmentIds?: string[];
   replyCommandId?: string;
   recoveryHold?: boolean;
   waitingReason?: string;
   runtimeStage?: string;
   nextInput?: string;
   turnActive?: boolean;
+  reportedBlock?: string;
   chatId?: string;
   commandId?: string;
   parentTaskId?: string;
@@ -174,6 +208,7 @@ export type ChatReply = {
 };
 export interface Tables {
   commands: {
+    attachmentIds?: string[];
     reply?: ChatReply;
     queued?: boolean;
     chatId?: string;
@@ -187,6 +222,7 @@ export interface Tables {
     taskIds?: string[];
   };
   accounts: Account;
+  attachments: Attachment;
   chats: Chat;
   repos: Repo;
   projects: Project;

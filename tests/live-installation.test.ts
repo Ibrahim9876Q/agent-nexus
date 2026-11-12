@@ -108,6 +108,56 @@ test('live server starts empty and refuses simulation and mock accounts', async 
     assert.equal(app.store.all('chats').length, 2);
     assert.equal(app.store.all('tasks').length, 0);
     assert.equal(app.store.all('agents').length, 0);
+    const png =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+    const imageBody = JSON.stringify({
+      projectId: project.id,
+      chatId: chatA.id,
+      name: 'pixel.png',
+      base64: png,
+    });
+    assert.equal(
+      (
+        await fetch(base + '/api/attachments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: imageBody,
+        })
+      ).status,
+      401,
+    );
+    const upload = await fetch(base + '/api/attachments', {
+      method: 'POST',
+      headers,
+      body: imageBody,
+    });
+    assert.equal(upload.status, 200);
+    const image = await upload.json();
+    assert.equal(
+      (await fetch(base + '/api/attachments/' + image.id)).status,
+      401,
+    );
+    const download = await fetch(base + '/api/attachments/' + image.id, {
+      headers,
+    });
+    assert.equal(download.headers.get('content-type'), 'image/png');
+    assert.equal(
+      Buffer.from(await download.arrayBuffer()).toString('base64'),
+      png,
+    );
+    const configured = await fetch(
+      base + '/api/projects/' + project.id + '/usage-recovery',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          autoResumeUsage: true,
+          autoHandoffUsage: false,
+        }),
+      },
+    );
+    assert.equal(configured.status, 200);
+    assert.equal((await configured.json()).autoHandoffUsage, false);
   } finally {
     await app.close();
   }

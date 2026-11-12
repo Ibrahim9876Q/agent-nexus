@@ -13,6 +13,7 @@ import { git } from './integrations/git.ts';
 import { Knowledge } from './integrations/knowledge.ts';
 import { executeMock, seedSimulation } from './simulation.ts';
 import { runtimeConfig } from './runtime-mode.ts';
+import { saveAttachment } from './attachments.ts';
 
 export async function createNexusServer(
   dataDir = runtimeConfig().dataDir,
@@ -57,7 +58,6 @@ export async function createNexusServer(
     res.setHeader('Cache-Control', 'no-store');
     next();
   });
-  app.use(express.json({ limit: '128kb' }));
   app.get('/api/session', (_req, res) => res.json({ token }));
   app.use('/api', (req, res, next) => {
     if (!validToken(req.headers['x-nexus-token'])) {
@@ -66,6 +66,20 @@ export async function createNexusServer(
     }
     next();
   });
+  app.post(
+    '/api/attachments',
+    express.json({ limit: '15mb' }),
+    async (req, res) =>
+      res.json(await saveAttachment(store, dataDir, req.body)),
+  );
+  app.get('/api/attachments/:id', (req, res) => {
+    const attachment = store.get(
+      'attachments',
+      z.string().uuid().parse(req.params.id),
+    );
+    res.type(attachment.mime).sendFile(resolve(attachment.path));
+  });
+  app.use(express.json({ limit: '128kb' }));
   const snapshot = () => ({
     ...engine.snapshot(),
     installation: mock ? 'mock' : 'live',
@@ -235,6 +249,9 @@ export async function createNexusServer(
     const v = z.object({ paused: z.boolean() }).strict().parse(req.body);
     await engine.pause(req.params.id, v.paused);
     res.json({ ok: true });
+  });
+  app.post('/api/projects/:id/usage-recovery', (req, res) => {
+    res.json(engine.configureUsage(req.params.id, req.body));
   });
   app.post('/api/tasks', (req, res) => {
     const v = z

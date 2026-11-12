@@ -38,6 +38,10 @@ The app starts empty. Opening a workspace does not start AI work until you send 
 
 In **Workspace & accounts**, each account has **Model**, **Reasoning effort**, and **Approvals** controls. Click **Save settings** to apply them to its next turn. Normal chat uses one coordinator and brings in other accounts when useful. Replies include collapsible thinking summaries and a work/usage footer. See [chat and model controls](docs/CHAT_AND_MODELS.md).
 
+Use **＋** in the composer to attach PNG, JPEG, or WebP images, or paste/drop them into the chat (up to 8 images, 10 MB each). Nexus sends your text and images to the selected Codex model.
+
+**Usage recovery** is enabled in workspace setup. At 95% reported usage, Nexus stops the turn, saves a local Git checkpoint and chat context, and continues with another available connected account. If none is available, it checks capacity once a minute and resumes when the provider reports capacity again. Keep Nexus running; Stop and manual pauses prevent automatic continuation. Checkpoints stay on your computer. See [images and recovery](docs/IMAGES_AND_RECOVERY.md).
+
 ## Mock installation
 
 For optional testing with scripted workers, after the first build:

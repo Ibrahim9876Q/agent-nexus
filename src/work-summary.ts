@@ -25,11 +25,13 @@ export function workSummary(
   accounts: Account[],
 ) {
   const used = tasks.filter((t) => t.attempts > 0);
-  const rows = used.map((task) => {
+  const rows = used.flatMap((task) => {
     const agent = agents.find((a) => a.id === task.agentId);
     const account = accounts.find((a) => a.id === agent?.accountId);
     const usage = Object.values(task.usageByTurn || {});
-    return {
+    const prior = task.handoffs || [];
+    const current = {
+      handedOff: false,
       task,
       account,
       model: task.execution?.model,
@@ -38,9 +40,24 @@ export function workSummary(
         !!task.turnIds?.length &&
         task.turnIds.every((id) => task.usageByTurn?.[id]),
       tokens: usage.length
-        ? usage.reduce((n, u) => n + u.totalTokens, 0)
+        ? usage.reduce((n, u) => n + u.totalTokens, 0) -
+          prior.reduce((n, h) => n + (h.tokens || 0), 0)
         : undefined,
     };
+    return [
+      ...prior
+        .filter((h) => h.used !== false)
+        .map((h) => ({
+          ...current,
+          handedOff: true,
+          account: accounts.find((a) => a.id === h.fromAccountId),
+          tokens: h.tokens,
+          model: h.model,
+          effort: h.effort,
+          usageComplete: h.tokens !== undefined,
+        })),
+      current,
+    ];
   });
   const known = rows.filter((r) => r.tokens !== undefined);
   return {

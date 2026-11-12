@@ -28,11 +28,17 @@ The send button shows animated dots while work is active. A live status line sho
 
 Restart does not start inference by itself. New input resumes restart-held work in its selected chat while leaving other chats held. A deliberate project pause stays paused until explicitly resumed. Request-type coordination messages such as `WORK_REQUEST`, `preview_request`, and `revision_request` wake completed workers. Informational messages do not restart finished work. New continuations send new input and unread coordination messages rather than repeating the entire accumulated user prompt.
 
+## Image messages and usage recovery
+
+Attach images with the composer **＋**, clipboard paste, or drag-and-drop. Thumbnails can be opened or removed before sending. Images remain with their chat and are sent as Codex image inputs, including image-only messages. PNG, JPEG and WebP are supported, up to eight per message and 10 MB each. A model explicitly reporting text-only input is rejected with a useful error.
+
+Workspace setup offers automatic quota resume and account handoff. At 95% reported usage, Nexus saves a stopped worker's files and public context locally; another eligible account can continue in a fresh thread. If no account is ready, it waits for fresh capacity. Stop cancels the wait. [Details and limits](IMAGES_AND_RECOVERY.md).
+
 ## Answers, summaries, and usage
 
 Normal answers use readable Markdown. **Working updates** contains the runtime's commentary messages; **Thinking summary** shows the provider's readable reasoning summaries. Both sections start collapsed. Raw reasoning text is not stored or shown. Authoritative completed message items replace streamed drafts, so progress and final text are not concatenated or duplicated.
 
-The response footer reports the number of accounts that actually started work. **Work by account** lists each tracked Nexus task, account, execution model/effort, status, and reported tokens. Multiple-account assignments expand automatically. New task/command lineage preserves attribution through planning and recursive delegation.
+The response footer reports the number of accounts that actually started work. **Work by account** lists each tracked Nexus task, account, execution model/effort, status, and reported tokens. Multiple-account assignments expand automatically. New task/command lineage preserves attribution through planning and recursive delegation. Usage handoffs also retain the source account attribution and reported tokens.
 
 Token totals come from provider-reported thread usage, subtracting the captured baseline for each turn. Repeated updates replace the same turn's count. Cached input and reasoning output are already included in the provider's total and are not added again. Missing or unattributable usage is explicitly unavailable; partial totals are marked. Native runtime children without separate Nexus task/usage records are not separately itemized. A directive that steers an existing job shows that job's totals, not an invented per-message split.
 

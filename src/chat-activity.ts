@@ -48,6 +48,13 @@ export function chatActivity(
     )
   )
     return result('approval', 'Waiting for your approval');
+  const recovery = tasks.find((t) => t.quotaRecovery);
+  if (recovery)
+    return result(
+      'usage',
+      recovery.waitingReason || recovery.quotaRecovery!.reason,
+      recovery.quotaRecovery!.state === 'stopping',
+    );
   const running = tasks
     .filter((t) => t.status === 'running' || t.turnActive)
     .sort((a, b) => (b.heartbeat || 0) - (a.heartbeat || 0))[0];

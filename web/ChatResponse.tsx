@@ -87,6 +87,17 @@ export function ChatResponse({
         </p>
       )}
       {answer && reply?.error && <p className="failure">{reply.error}</p>}
+      {primary?.quotaRecovery && (
+        <p className="recovery-status" role="status">
+          {primary.waitingReason || primary.quotaRecovery.reason}
+          {primary.quotaRecovery.checkpoint && (
+            <small title={primary.quotaRecovery.checkpoint}>
+              {' '}
+              Local checkpoint saved
+            </small>
+          )}
+        </p>
+      )}
       {summary.rows.length > 0 && !active && reply?.kind !== 'status' && (
         <div className="response-summary">
           <span>
@@ -101,21 +112,26 @@ export function ChatResponse({
           </span>
           <details open={summary.accountsUsed > 1}>
             <summary>Work by account{active ? ' · in progress' : ''}</summary>
-            {summary.rows.map(({ task, account, model, effort, tokens }) => (
-              <div className="assignment-row" key={task.id}>
-                <strong>{account?.name || 'Unknown account'}</strong>
-                <span>
-                  {model || 'Codex default'}
-                  {effort ? ` · ${effort}` : ''}
-                </span>
-                <p>
-                  {task.title} · {task.status}
-                  {tokens === undefined
-                    ? ' · usage unavailable'
-                    : ` · ${tokens.toLocaleString()} tokens`}
-                </p>
-              </div>
-            ))}
+            {summary.rows.map(
+              ({ task, account, model, effort, tokens, handedOff }, index) => (
+                <div
+                  className="assignment-row"
+                  key={task.id + ':' + account?.id + ':' + index}
+                >
+                  <strong>{account?.name || 'Unknown account'}</strong>
+                  <span>
+                    {model || 'Codex default'}
+                    {effort ? ` · ${effort}` : ''}
+                  </span>
+                  <p>
+                    {task.title} · {handedOff ? 'handed off' : task.status}
+                    {tokens === undefined
+                      ? ' · usage unavailable'
+                      : ` · ${tokens.toLocaleString()} tokens`}
+                  </p>
+                </div>
+              ),
+            )}
           </details>
         </div>
       )}

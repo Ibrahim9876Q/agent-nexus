@@ -52,10 +52,10 @@ test('capacity merges sparse windows, expires only reported resets, and preserve
     capacityUpdate(a, { primary: { usedPercent: 'made up' } }),
   );
 });
-test('throttle backoff stays on the same account and explicit drain takes precedence', () => {
+test('throttle and quota backoff pace the source account and explicit drain takes precedence', () => {
   assert.equal(backoffUntil('rateLimitExceeded', 1000), 61000);
   assert.equal(backoffUntil('serverOverloaded', 1000), 16000);
-  assert.equal(backoffUntil('usageLimitExceeded', 1000), undefined);
+  assert.equal(backoffUntil('usageLimitExceeded', 1000), 61000);
   assert.equal(backoffUntil('unauthorized', 1000), undefined);
   assert.equal(
     admissionReason({ ...a, cooldownUntil: 61000 }, 1000),
@@ -65,6 +65,18 @@ test('throttle backoff stays on the same account and explicit drain takes preced
     admissionReason({ ...a, enabled: false, cooldownUntil: 61000 }, 1000),
     'draining',
   );
+  const blocked = { ...a, usageBlockedAt: 1000 };
+  assert.equal(
+    capacityUpdate(blocked, {}, 2000, false).usageBlockedAt,
+    1000,
+    'Missing telemetry must not clear an exhausted account',
+  );
+  assert.equal(
+    capacityUpdate(blocked, { primary: { usedPercent: 94 } }, 2000, false)
+      .usageBlockedAt,
+    undefined,
+  );
+  assert.equal(admissionReason(blocked, 2000), 'quota reached');
 });
 test('draining finishes active work while withholding the next queued task', async () => {
   const store = new Store(':memory:');
