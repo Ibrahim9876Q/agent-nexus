@@ -1796,3 +1796,56 @@ kbd {
   display: block;
   margin-top: 6px;
 }
+
+.team-activity {
+  margin: 14px 0;
+  display: grid;
+  gap: 8px;
+}
+.team-activity h3 {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.team-plan,
+.team-worker,
+.team-messages {
+  border: 1px solid #203951;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #0b1c2d;
+  overflow-wrap: anywhere;
+}
+.team-plan p,
+.team-worker p,
+.team-messages p {
+  margin: 5px 0;
+  white-space: pre-wrap;
+}
+.team-worker .chat-author {
+  margin: 0 0 5px;
+}
+.team-worker details {
+  margin-top: 5px;
+}
+.team-role,
+.team-meta {
+  color: #a0bdd4;
+  font-size: 0.8rem;
+}
+.team-messages ol {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.team-messages li + li {
+  border-top: 1px solid #203951;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.team-activity summary {
+  cursor: pointer;
+  color: #9bd9ff;
+}
+.chat-author strong {
+  text-transform: none;
+}

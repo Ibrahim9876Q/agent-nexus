@@ -30,6 +30,9 @@ export class Bus {
       );
     if (old) return old;
     const project = this.store.get('projects', sender.projectId);
+    const task = sender.taskId
+      ? this.store.get('tasks', sender.taskId)
+      : undefined;
     const message: Message = {
       id: id(),
       sender: senderId,
@@ -37,6 +40,9 @@ export class Bus {
       projectId: project.id,
       repoId: project.repoId,
       taskId: sender.taskId,
+      commandId: task?.replyCommandId || task?.commandId,
+      senderAccountId: sender.accountId,
+      recipientAccountId: recipient.accountId,
       type,
       timestamp: new Date().toISOString(),
       payload,

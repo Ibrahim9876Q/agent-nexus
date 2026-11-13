@@ -529,3 +529,130 @@ test('custom worker replies wake a finished coordinator and blocked workers repo
     store.close();
   }
 });
+
+test('Auto team records one lead item, runs two peer accounts, and reviews their evidence in the same chat', async () => {
+  const store = new Store(':memory:');
+  const engine = new Engine(store, tmpdir(), {
+    execute: async (task, agent, e) => {
+      if (agent.role === 'coordinator') {
+        const command = store.get('commands', task.replyCommandId!);
+        if (!command.teamPlan) {
+          const plan = {
+            tasks: accounts.map((account, index) => ({
+              key: 'item-' + index,
+              accountId: account.id,
+              role: index ? 'worker' : 'coordinator',
+              title: ['Integration', 'Interface', 'Tests'][index],
+              prompt: [
+                'Split by interface and validation.',
+                'Prepare interface.',
+                'Validate interface.',
+              ][index],
+              dependencies: [],
+            })),
+          };
+          await assert.rejects(
+            e.tool(agent.id, 'nexus_plan', { tasks: plan.tasks.slice(0, 2) }),
+            /each available/,
+          );
+          const result = await e.tool(agent.id, 'nexus_plan', plan);
+          assert.deepEqual(
+            await e.tool(agent.id, 'nexus_plan', plan),
+            result,
+            'Repeated plan does not duplicate work',
+          );
+          return 'Coordinator completed integration';
+        }
+        for (const message of e.bus.inbox(agent.id))
+          e.bus.ack(agent.id, message.id);
+        return command.teamReviewStarted
+          ? 'Reviewed interface and test results'
+          : 'Waiting for the other report';
+      }
+      if (task.title === 'Interface') {
+        const peer = store.all('tasks').find((row) => row.title === 'Tests')!;
+        await e.tool(agent.id, 'nexus_send', {
+          recipient: peer.agentId,
+          type: 'INTERFACE_READY',
+          payload: 'Use the shared interface contract',
+          dedupeKey: 'interface-ready',
+        });
+        return 'Interface implemented';
+      }
+      await delay();
+      const inbox = (await e.tool(
+        agent.id,
+        'nexus_inbox',
+        {},
+      )) as import('../src/types').Message[];
+      assert.ok(
+        inbox.some(
+          (message) => message.payload === 'Use the shared interface contract',
+        ),
+      );
+      for (const message of inbox) e.bus.ack(agent.id, message.id);
+      return 'Tests passed';
+    },
+  });
+  engine.git.worktree = async (_, taskId) => ({
+    path: tmpdir(),
+    branch: taskId,
+  });
+  const accounts = ['boss', 'frontend', 'quality'].map((name) =>
+    engine.addAccount({ name: name + '@example.test', provider: 'mock' }),
+  );
+  try {
+    const repo = store.put('repos', {
+      id: id(),
+      name: 'Fixture',
+      path: tmpdir(),
+    });
+    const project = engine.addProject(repo.id, 'Fixture', 'Team work');
+    store.put('projects', { ...project, coordinatorAccountId: accounts[0].id });
+    const command = await engine.command({
+      projectId: project.id,
+      text: 'Build and test a feature',
+    });
+    assert.equal(command.autoTeam, true);
+    for (let i = 0; i < 20; i++) {
+      await engine.tick();
+      await delay();
+    }
+    const state = { ...engine.snapshot(), installation: 'mock' as const };
+    const saved = store.get('commands', command.id);
+    assert.equal(saved.teamPlan?.leadTask, 'Integration');
+    assert.equal(saved.teamPlan?.workerTaskIds.length, 2);
+    assert.equal(saved.teamReviewStarted, true);
+    assert.equal(saved.reply?.accountId, accounts[0].id);
+    assert.equal(saved.reply?.text, 'Reviewed interface and test results');
+    assert.equal(saved.reply?.state, 'completed');
+    assert.equal(state.tasks.length, 3);
+    assert.ok(
+      state.tasks.every(
+        (task) => task.status === 'completed' && task.chatId === command.chatId,
+      ),
+    );
+    const html = renderToStaticMarkup(
+      createElement(ChatResponse, { command: saved, state }),
+    );
+    for (const content of [
+      'boss@example.test',
+      'frontend@example.test',
+      'quality@example.test',
+      'Use the shared interface contract',
+      'Split by interface and validation.',
+      'Reviewed interface and test results',
+    ]) {
+      assert.ok(html.includes(content), content);
+    }
+    const solo = await engine.command({
+      projectId: project.id,
+      text: 'One account only',
+      accountId: accounts[0].id,
+    });
+    assert.equal(solo.autoTeam, false);
+  } finally {
+    await engine.stop();
+    store.close();
+  }
+});

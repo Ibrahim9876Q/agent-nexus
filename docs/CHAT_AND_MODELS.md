@@ -20,7 +20,9 @@ Each workspace supports multiple named chats. Create one with **＋** beside **C
 
 Older workspace history is migrated transactionally into one chat. Existing task outputs, Git branches/worktrees and Codex thread identifiers are preserved. Migration does not start AI work.
 
-**Chat** is the default. A message goes to the selected account's coordinator, or the workspace's coordinator when using the automatic destination. The model is instructed to answer greetings, questions, and discussion directly. Repository inspection and delegation are optional and should serve the request. This behavior is model-directed, not a hard-coded greeting/demo response.
+**Chat** is the default. With **Coordinator / auto team**, the workspace coordinator receives the prompt. For work that can be split, it publishes a plan with its own work item and one per other available account, then reviews their reports and changes before the final reply. For a simple question it can answer directly. Select a specific account for a regular chat without automatic team planning.
+
+The chat identifies responses by the signed-in account email, and **Team activity** shows the public plan, worker assignments, progress, summaries, and messages between accounts. Workers can coordinate directly through the shared chat bus while editing in separate worktrees. Review does not by itself publish or merge their work.
 
 Subsequent messages reuse the coordinator's Codex thread and worktree. Each user message has its own saved assistant reply. Messages submitted while the coordinator is running queue for a separate reply after that turn. Earlier replies remain visible when new turns start. **Direct / override** explicitly steers matching workers; **Plan new work** explicitly requests planning. The coordinator waits for planned/delegated work and receives its evidence before completing the final report.
 

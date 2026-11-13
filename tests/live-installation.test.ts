@@ -20,7 +20,9 @@ test('live and mock installations have separate default locations', () => {
 });
 test('live server starts empty and refuses simulation and mock accounts', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nexus-live-'));
-  const app = await createNexusServer(root, 0, { mock: false });
+  const app = await createNexusServer(join(root, '.nexus', 'live'), 0, {
+    mock: false,
+  });
   app.server.listen(0, '127.0.0.1');
   await once(app.server, 'listening');
   const a = app.server.address();

@@ -18,6 +18,7 @@ export type TokenUsage = {
   reasoningOutputTokens: number;
 };
 export type Account = {
+  email?: string;
   usageBlockedAt?: number;
   model?: string | null;
   effort?: string | null;
@@ -159,6 +160,9 @@ export type Task = {
   heartbeat?: number;
 };
 export type Message = {
+  commandId?: string;
+  senderAccountId?: string;
+  recipientAccountId?: string;
   id: string;
   sender: string;
   recipient: string;
@@ -190,6 +194,7 @@ export type Approval = {
 };
 export type Event = { id: string; at: string; type: string; data: unknown };
 export type ChatReply = {
+  accountId?: string;
   legacyMissing?: boolean;
   text: string;
   state:
@@ -208,6 +213,9 @@ export type ChatReply = {
 };
 export interface Tables {
   commands: {
+    autoTeam?: boolean;
+    teamPlan?: { leadTask: string; rationale: string; workerTaskIds: string[] };
+    teamReviewStarted?: boolean;
     attachmentIds?: string[];
     reply?: ChatReply;
     queued?: boolean;

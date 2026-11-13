@@ -3,6 +3,7 @@ import type { Tables } from '../src/types';
 import { commandTasks, workSummary } from '../src/work-summary';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { accountLabel, TeamActivity } from './TeamActivity';
 
 export function ChatResponse({
   command,
@@ -16,6 +17,19 @@ export function ChatResponse({
     tasks.find((t) => command.taskIds?.includes(t.id)) || tasks[0];
   const summary = workSummary(tasks, state.agents, state.accounts);
   const reply = command.reply;
+  const author = state.agents.find(
+    (agent) => agent.id === (primary?.agentId || command.targets[0]),
+  );
+  const accountId = reply?.accountId || author?.accountId;
+  const lead =
+    accountId && reply?.kind !== 'status'
+      ? accountLabel(state, accountId)
+      : 'Nexus';
+  const workers = tasks.filter(
+    (task) =>
+      task.id !== primary?.id &&
+      (!command.autoTeam || task.commandId === command.id),
+  );
   const progress = reply?.progress || [];
   const thinking = reply?.reasoningSummary;
   const paused =
@@ -40,7 +54,12 @@ export function ChatResponse({
       aria-busy={active}
     >
       <div className="chat-author">
-        NEXUS <span>{label}</span>
+        <strong>{lead}</strong>{' '}
+        <span>
+          {command.autoTeam && lead !== 'Nexus'
+            ? `Coordinator · ${label}`
+            : label}
+        </span>
       </div>
       {thinking && (
         <details className="thinking-panel">
@@ -56,6 +75,12 @@ export function ChatResponse({
           ))}
         </details>
       )}
+      <TeamActivity
+        command={command}
+        state={state}
+        workers={workers}
+        lead={lead}
+      />
       {answer ? (
         <div className={'answer-text' + (active ? ' is-streaming' : '')}>
           <ReactMarkdown

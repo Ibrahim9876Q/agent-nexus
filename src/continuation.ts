@@ -16,7 +16,13 @@ export function relatedWorker(
     sender.projectId === recipient.projectId &&
     (sender.role === 'coordinator' ||
       recipient.parentId === sender.id ||
-      tasks.some((t) => t.id === task.parentTaskId && t.agentId === sender.id))
+      tasks.some(
+        (t) => t.id === task.parentTaskId && t.agentId === sender.id,
+      ) ||
+      (!!task.parentTaskId &&
+        tasks.some(
+          (t) => t.id === sender.taskId && t.parentTaskId === task.parentTaskId,
+        )))
   );
 }
 export function requestedResult(

@@ -959,8 +959,9 @@ function App() {
             )}
             {project && (
               <div className="composer-hint">
-                Chat uses one coordinator. It can bring in other accounts when
-                useful.
+                {target === 'all' && mode === 'chat'
+                  ? 'Auto team: your coordinator splits larger requests, works alongside the team, and reviews their results.'
+                  : 'Select Coordinator / auto team in Chat to divide larger requests across accounts.'}
               </div>
             )}
           </div>

@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
@@ -77,7 +77,13 @@ export async function createNexusServer(
       'attachments',
       z.string().uuid().parse(req.params.id),
     );
-    res.type(attachment.mime).sendFile(resolve(attachment.path));
+    // Express denies dot-prefixed path segments by default. The installation
+    // lives under .nexus; constrain the request to a known file in that root.
+    const path = resolve(attachment.path);
+    const root = resolve(dataDir, 'attachments');
+    if (dirname(path) !== root)
+      throw new Error('Attachment path is outside this installation');
+    res.type(attachment.mime).sendFile(basename(path), { root });
   });
   app.use(express.json({ limit: '128kb' }));
   const snapshot = () => ({

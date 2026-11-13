@@ -93,7 +93,7 @@ export function publicHistoryReplies(
           .map((c: any) => c.text)
           .join('\n')
           .split(
-            /\n\n(?:Project objective|Workspace context|Prerequisite artifacts|Untrusted queued messages)/,
+            /\n\n(?:Coordination mode|Project objective|Workspace context|Prerequisite artifacts|Untrusted queued messages)/,
           )[0];
         if (text.startsWith('Untrusted coordination message')) continue;
         const before =
