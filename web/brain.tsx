@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { State } from './main';
 import { api } from './api';
 import {
   graphCenter,
   graphKinds,
   graphLayout,
+  curvedLink,
   viewToWorld,
   workspaceGraph,
   type Contribution,
@@ -14,8 +15,15 @@ import {
 
 type Preferences = {
   positions: Record<string, Point>;
+  offsets: Record<string, Point>;
   labels: Record<GraphKind, boolean>;
 };
+const originPoint = { x: 0, y: 0 };
+const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y });
+const subtract = (a: Point, b: Point): Point => ({
+  x: a.x - b.x,
+  y: a.y - b.y,
+});
 const defaultLabels = {
   repository: true,
   project: true,
@@ -30,16 +38,17 @@ function readPreferences(projectId: string): Preferences {
     const value = JSON.parse(
       localStorage.getItem('nexus-brain-' + projectId) || '{}',
     );
-    const positions = Object.fromEntries(
-      Object.entries(value.positions || {}).filter(
-        ([, p]: [string, any]) =>
-          p &&
-          Number.isFinite(p.x) &&
-          Number.isFinite(p.y) &&
-          Math.abs(p.x) < 1e7 &&
-          Math.abs(p.y) < 1e7,
-      ),
-    );
+    const points = (entries: unknown) =>
+      Object.fromEntries(
+        Object.entries(entries || {}).filter(
+          ([, p]: [string, any]) =>
+            p &&
+            Number.isFinite(p.x) &&
+            Number.isFinite(p.y) &&
+            Math.abs(p.x) < 1e7 &&
+            Math.abs(p.y) < 1e7,
+        ),
+      ) as Record<string, Point>;
     const labels = Object.fromEntries(
       graphKinds.map((kind) => [
         kind,
@@ -48,9 +57,14 @@ function readPreferences(projectId: string): Preferences {
           : defaultLabels[kind],
       ]),
     ) as Preferences['labels'];
-    return { positions: positions as Preferences['positions'], labels };
+    // Old freeform positions would hide the new cluster layout.
+    return {
+      positions: points(value.version === 2 && value.positions),
+      offsets: points(value.version === 2 && value.offsets),
+      labels,
+    };
   } catch {
-    return { positions: {}, labels: { ...defaultLabels } };
+    return { positions: {}, offsets: {}, labels: { ...defaultLabels } };
   }
 }
 export function Brain({
@@ -63,16 +77,31 @@ export function Brain({
   onAgent: (id: string) => void;
 }) {
   const [saved] = useState(() => readPreferences(projectId));
-  const [manual, setManual] = useState(saved.positions);
-  const manualRef = useRef(manual);
+  const [placement, setPlacement] = useState({
+    positions: saved.positions,
+    offsets: saved.offsets,
+  });
+  const placementRef = useRef(placement);
   const [labels, setLabels] = useState(saved.labels);
-  const [controlsOpen, setControlsOpen] = useState(true);
+  const [controlsOpen, setControlsOpen] = useState(
+    () => window.innerWidth > 1050,
+  );
   const [selectedId, setSelectedId] = useState('');
+  const [hoveredId, setHoveredId] = useState('');
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
+  const glowId = useId();
   const drag = useRef<
-    { id?: string; start: Point; origin: Point; moved: boolean } | undefined
+    | {
+        pointer: number;
+        id?: string;
+        cluster?: string;
+        start: Point;
+        origin: Point;
+        moved: boolean;
+      }
+    | undefined
   >(undefined);
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const signature = state.tasks
@@ -81,7 +110,6 @@ export function Brain({
     .join();
   useEffect(() => {
     let dead = false;
-    setContributions([]);
     if (projectId)
       api('/projects/' + projectId + '/contributions')
         .then((result) => {
@@ -96,24 +124,68 @@ export function Brain({
     () => workspaceGraph(state, projectId, contributions),
     [state, projectId, contributions],
   );
-  const topology = graph.nodes
-    .map((n) => [n.id, n.kind, n.accountId].join(':'))
-    .join('|');
-  const layout = useMemo(() => graphLayout(graph.nodes), [topology]);
-  const positions = { ...layout, ...manual };
+  const topology = graph.nodes.map((n) => [
+    n.id,
+    n.kind,
+    n.currentTaskId,
+    n.kind === 'task' ? n.label : '',
+  ]);
+  const layoutKey = JSON.stringify([
+    topology,
+    graph.edges.filter((edge) =>
+      ['owns', 'contributes', 'changed', 'scope'].includes(edge.kind),
+    ),
+  ]);
+  const layout = useMemo(
+    () => graphLayout(graph.nodes, graph.edges),
+    [layoutKey],
+  );
+  const clusterById = new Map(
+    layout.clusters.map((cluster) => [cluster.id, cluster]),
+  );
+  const clusterOffset = (id?: string) =>
+    (id && placement.offsets[id]) || originPoint;
+  const positions = Object.fromEntries(
+    graph.nodes.map((node) => [
+      node.id,
+      add(
+        placement.positions[node.id] || layout.positions[node.id],
+        clusterOffset(layout.clusterFor.get(node.id)),
+      ),
+    ]),
+  );
+  const zoom = scale * layout.fitScale;
   const selected = graph.nodes.find((n) => n.id === selectedId);
-  const accounts = graph.nodes.filter((n) => n.kind === 'account');
-  function persist(positions = manualRef.current, names = labels) {
+  function persist(names = labels) {
     try {
       localStorage.setItem(
         'nexus-brain-' + projectId,
-        JSON.stringify({ positions, labels: names }),
+        JSON.stringify({ version: 2, ...placementRef.current, labels: names }),
       );
     } catch {}
   }
   function moveNode(id: string, point: Point) {
-    manualRef.current = { ...manualRef.current, [id]: point };
-    setManual(manualRef.current);
+    const current = placementRef.current;
+    const cluster = layout.clusterFor.get(id);
+    placementRef.current = {
+      ...current,
+      positions: {
+        ...current.positions,
+        [id]: subtract(
+          point,
+          (cluster && current.offsets[cluster]) || originPoint,
+        ),
+      },
+    };
+    setPlacement(placementRef.current);
+  }
+  function moveCluster(id: string, point: Point) {
+    const current = placementRef.current;
+    placementRef.current = {
+      ...current,
+      offsets: { ...current.offsets, [id]: point },
+    };
+    setPlacement(placementRef.current);
   }
   function viewPoint(event: {
     clientX: number;
@@ -129,22 +201,25 @@ export function Brain({
   }
   function changeLabels(next: Preferences['labels']) {
     setLabels(next);
-    persist(manualRef.current, next);
+    persist(next);
   }
   return (
     <div className="brain">
       <div className="graph-toolbar">
         <div>
           <strong>Workspace brain</strong>
-          <small>Repository at the center · accounts on the outside</small>
+          <small>
+            {layout.clusters.length} task clusters · {graph.nodes.length}{' '}
+            connected records
+          </small>
         </div>
         <button
           onClick={() => {
-            manualRef.current = {};
-            setManual({});
+            placementRef.current = { positions: {}, offsets: {} };
+            setPlacement(placementRef.current);
             setScale(1);
             setPan({ x: 0, y: 0 });
-            persist({});
+            persist();
           }}
         >
           Reset layout
@@ -181,18 +256,31 @@ export function Brain({
             viewBox="0 0 1200 900"
             aria-label="Interactive workspace graph"
             onPointerDown={(e) => {
-              if (e.button !== 0) return;
+              if (e.button !== 0 || drag.current) return;
               const point = viewPoint(e);
               if (!point) return;
               const id =
                 (e.target as Element)
                   .closest('[data-node-id]')
                   ?.getAttribute('data-node-id') || undefined;
-              if (id) setSelectedId(id);
+              const cluster = id
+                ? e.shiftKey
+                  ? layout.clusterFor.get(id)
+                  : undefined
+                : (e.target as Element)
+                    .closest('[data-cluster-id]')
+                    ?.getAttribute('data-cluster-id') || undefined;
+              if (id || cluster) setSelectedId(id || cluster!);
               drag.current = {
+                pointer: e.pointerId,
                 id,
-                start: id ? viewToWorld(point, pan, scale) : point,
-                origin: id ? positions[id] : pan,
+                cluster,
+                start: id || cluster ? viewToWorld(point, pan, zoom) : point,
+                origin: cluster
+                  ? clusterOffset(cluster)
+                  : id
+                    ? positions[id]
+                    : pan,
                 moved: false,
               };
               e.currentTarget.setPointerCapture(e.pointerId);
@@ -200,12 +288,20 @@ export function Brain({
             onPointerMove={(e) => {
               const active = drag.current;
               const point = viewPoint(e);
-              if (!active || !point) return;
-              const next = active.id ? viewToWorld(point, pan, scale) : point;
+              if (!active || active.pointer !== e.pointerId || !point) return;
+              const next =
+                active.id || active.cluster
+                  ? viewToWorld(point, pan, zoom)
+                  : point;
               const dx = next.x - active.start.x,
                 dy = next.y - active.start.y;
               if (Math.abs(dx) + Math.abs(dy) > 2) active.moved = true;
-              if (active.id)
+              if (active.cluster)
+                moveCluster(active.cluster, {
+                  x: active.origin.x + dx,
+                  y: active.origin.y + dy,
+                });
+              else if (active.id)
                 moveNode(active.id, {
                   x: active.origin.x + dx,
                   y: active.origin.y + dy,
@@ -214,7 +310,8 @@ export function Brain({
             }}
             onPointerUp={(e) => {
               const active = drag.current;
-              if (active?.id) {
+              if (!active || active.pointer !== e.pointerId) return;
+              if (active.id || active.cluster) {
                 persist();
                 if (!active.moved) setControlsOpen(true);
               }
@@ -222,44 +319,100 @@ export function Brain({
               if (e.currentTarget.hasPointerCapture(e.pointerId))
                 e.currentTarget.releasePointerCapture(e.pointerId);
             }}
-            onPointerCancel={() => {
-              if (drag.current?.id) persist();
+            onPointerCancel={(e) => {
+              if (drag.current?.pointer !== e.pointerId) return;
+              if (drag.current.id || drag.current.cluster) persist();
               drag.current = undefined;
             }}
-            onLostPointerCapture={() => {
-              if (drag.current?.id) persist();
+            onLostPointerCapture={(e) => {
+              if (drag.current?.pointer !== e.pointerId) return;
+              if (drag.current.id || drag.current.cluster) persist();
               drag.current = undefined;
             }}
           >
-            <g
-              transform={`translate(${pan.x} ${pan.y}) translate(${graphCenter.x} ${graphCenter.y}) scale(${scale}) translate(${-graphCenter.x} ${-graphCenter.y})`}
-            >
-              {accounts.length > 1 && (
-                <polyline
-                  className="account-orbit"
-                  aria-hidden="true"
-                  points={[
-                    ...accounts,
-                    ...(accounts.length > 2 ? [accounts[0]] : []),
-                  ]
-                    .map((a) => positions[a.id].x + ',' + positions[a.id].y)
-                    .join(' ')}
-                />
-              )}
-              {graph.edges.map((edge) => (
-                <line
-                  className={'edge ' + edge.kind}
-                  key={JSON.stringify(edge)}
-                  x1={positions[edge.source].x}
-                  y1={positions[edge.source].y}
-                  x2={positions[edge.target].x}
-                  y2={positions[edge.target].y}
-                >
-                  <title>{edge.kind}</title>
-                </line>
+            <defs>
+              <radialGradient id={glowId}>
+                <stop offset="0%" stopColor="white" />
+                <stop offset="57%" stopColor="white" stopOpacity=".58" />
+                <stop offset="100%" stopColor="white" stopOpacity="0" />
+              </radialGradient>
+              {layout.clusters.map((cluster, i) => (
+                <radialGradient key={cluster.id} id={glowId + '-lobe-' + i}>
+                  <stop
+                    offset="0%"
+                    stopColor={cluster.color}
+                    stopOpacity=".14"
+                  />
+                  <stop
+                    offset="60%"
+                    stopColor={cluster.color}
+                    stopOpacity=".075"
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={cluster.color}
+                    stopOpacity="0"
+                  />
+                </radialGradient>
               ))}
+            </defs>
+            <g
+              transform={`translate(${pan.x} ${pan.y}) translate(${graphCenter.x} ${graphCenter.y}) scale(${zoom}) translate(${-graphCenter.x} ${-graphCenter.y})`}
+            >
+              {layout.clusters.map((cluster, i) => {
+                const center = add(cluster.center, clusterOffset(cluster.id));
+                return (
+                  <circle
+                    className="cluster-halo"
+                    key={cluster.id}
+                    data-cluster-id={cluster.id}
+                    cx={center.x}
+                    cy={center.y}
+                    r={cluster.radius}
+                    fill={`url(#${glowId}-lobe-${i})`}
+                  >
+                    <title>{cluster.label} · drag to move cluster</title>
+                  </circle>
+                );
+              })}
+              {graph.edges.map((edge) => {
+                const from = layout.clusterFor.get(edge.source),
+                  to = layout.clusterFor.get(edge.target);
+                const focus = hoveredId || selectedId;
+                const related = focus === edge.source || focus === edge.target;
+                const local = !!from && from === to;
+                return (
+                  <path
+                    className={
+                      'edge ' +
+                      (local ? 'inside' : 'across') +
+                      (related ? ' related' : '')
+                    }
+                    key={JSON.stringify(edge)}
+                    style={{
+                      color: local ? clusterById.get(from)?.color : undefined,
+                    }}
+                    d={curvedLink(
+                      positions[edge.source],
+                      positions[edge.target],
+                    )}
+                  />
+                );
+              })}
               {graph.nodes.map((node) => {
                 const point = positions[node.id];
+                const cluster = clusterById.get(
+                  layout.clusterFor.get(node.id) || '',
+                );
+                const radius = {
+                  repository: 12,
+                  project: 7,
+                  account: 8,
+                  task: 8,
+                  agent: 5,
+                  branch: 4.5,
+                  file: 3.6,
+                }[node.kind];
                 return (
                   <g
                     key={node.id}
@@ -269,6 +422,13 @@ export function Brain({
                       node.kind +
                       (selectedId === node.id ? ' picked' : '')
                     }
+                    style={{ color: cluster?.color }}
+                    onPointerEnter={() => setHoveredId(node.id)}
+                    onPointerLeave={() =>
+                      setHoveredId((id) => (id === node.id ? '' : id))
+                    }
+                    onFocus={() => setHoveredId(node.id)}
+                    onBlur={() => setHoveredId('')}
                     role="button"
                     tabIndex={0}
                     aria-label={node.kind + ': ' + node.label}
@@ -286,10 +446,12 @@ export function Brain({
                       };
                       if (delta[e.key]) {
                         e.preventDefault();
-                        moveNode(node.id, {
-                          x: point.x + delta[e.key].x,
-                          y: point.y + delta[e.key].y,
-                        });
+                        if (e.shiftKey && cluster)
+                          moveCluster(
+                            cluster.id,
+                            add(clusterOffset(cluster.id), delta[e.key]),
+                          );
+                        else moveNode(node.id, add(point, delta[e.key]));
                         persist();
                       }
                     }}
@@ -299,23 +461,26 @@ export function Brain({
                       className="node-hit-target"
                       cx={point.x}
                       cy={point.y}
-                      r="18"
+                      r={radius + 5}
                     />
                     <circle
+                      className="node-aura"
                       cx={point.x}
                       cy={point.y}
-                      r={
-                        node.kind === 'repository'
-                          ? 15
-                          : node.kind === 'account'
-                            ? 11
-                            : 6
-                      }
+                      r={radius * 2.8}
+                      fill={`url(#${glowId})`}
                     />
-                    {labels[node.kind] && (
+                    <circle
+                      className="node-core"
+                      cx={point.x}
+                      cy={point.y}
+                      r={radius}
+                    />
+                    {(labels[node.kind] ||
+                      node.id === (hoveredId || selectedId)) && (
                       <text
                         x={point.x}
-                        y={point.y + (node.kind === 'repository' ? 32 : 26)}
+                        y={point.y + radius + 16}
                         textAnchor="middle"
                       >
                         {node.label.length > 30
@@ -334,8 +499,8 @@ export function Brain({
             </div>
           )}
           <div className="graph-help">
-            Drag a bubble to move it · drag the background to pan · scroll to
-            zoom <span>{Math.round(scale * 100)}%</span>
+            Drag a node or its cluster’s glow · drag empty space to pan · scroll
+            to zoom <span>{Math.round(scale * 100)}%</span>
           </div>
         </div>
         {controlsOpen && (
@@ -344,6 +509,31 @@ export function Brain({
             id="brain-controls"
             aria-label="Brain names and details"
           >
+            {layout.clusters.length > 0 && (
+              <div className="graph-topics">
+                <h3>Task clusters</h3>
+                {layout.clusters.map((cluster) => (
+                  <button
+                    key={cluster.id}
+                    type="button"
+                    title={cluster.label}
+                    aria-pressed={selectedId === cluster.id}
+                    onClick={() => {
+                      setSelectedId(cluster.id);
+                      const point = positions[cluster.id];
+                      setPan({
+                        x: (graphCenter.x - point.x) * zoom,
+                        y: (graphCenter.y - point.y) * zoom,
+                      });
+                    }}
+                  >
+                    <i style={{ color: cluster.color }} aria-hidden="true" />
+                    <span>{cluster.label}</span>
+                    <small>{cluster.nodeIds.length}</small>
+                  </button>
+                ))}
+              </div>
+            )}
             <h3>Visible names</h3>
             <p>Show or hide labels by type.</p>
             <div className="graph-label-actions">

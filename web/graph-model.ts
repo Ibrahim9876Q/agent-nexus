@@ -23,6 +23,7 @@ export type GraphNode = {
   kind: GraphKind;
   detail: string;
   accountId?: string;
+  currentTaskId?: string;
 };
 export type GraphEdge = { source: string; target: string; kind: string };
 export type Point = { x: number; y: number };
@@ -79,6 +80,7 @@ export function workspaceGraph(
       kind: 'agent',
       detail: `${agent.kind} · ${agent.status} · ${agent.permissions}`,
       accountId: agent.accountId,
+      currentTaskId: agent.taskId,
     });
     link(agent.accountId, agent.id, 'authenticates');
     if (agent.parentId) link(agent.parentId, agent.id, 'delegates');
@@ -174,49 +176,131 @@ export function accountAnchors(
     }),
   );
 }
-export function graphLayout(nodes: GraphNode[]): Record<string, Point> {
-  const accounts = nodes.filter((n) => n.kind === 'account');
-  const points: Record<string, Point> = accountAnchors(
-    accounts.map((a) => a.id),
-  );
+export type TaskCluster = {
+  id: string;
+  label: string;
+  center: Point;
+  radius: number;
+  color: string;
+  nodeIds: string[];
+};
+const hues = [
+  '#79e9c9',
+  '#efbb78',
+  '#bba6ff',
+  '#7bbdff',
+  '#ffa5b9',
+  '#b8db87',
+  '#79dce8',
+  '#ed9cea',
+];
+const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+const around = (center: Point, r: number, angle: number): Point => ({
+  x: center.x + r * Math.cos(angle),
+  y: center.y + r * Math.sin(angle),
+});
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+export function graphLayout(nodes: GraphNode[], edges: GraphEdge[]) {
+  const points: Record<string, Point> = Object.create(null);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const tasks = nodes.filter((node) => node.kind === 'task');
+  const clusterFor = new Map<string, string>();
+  const claim = (nodeId: string, taskId: string) => {
+    if (!clusterFor.has(nodeId) && byId.get(taskId)?.kind === 'task')
+      clusterFor.set(nodeId, taskId);
+  };
   for (const node of nodes) {
+    if (node.kind === 'task') claim(node.id, node.id);
+    if (node.kind === 'agent' && node.currentTaskId)
+      claim(node.id, node.currentTaskId);
     if (node.kind === 'repository') points[node.id] = { ...graphCenter };
     if (node.kind === 'project')
-      points[node.id] = { x: graphCenter.x, y: graphCenter.y - 65 };
+      points[node.id] = { x: graphCenter.x, y: graphCenter.y - 58 };
   }
-  const groups = new Map<string, GraphNode[]>();
-  for (const node of nodes.filter(
-    (n) => !['account', 'repository', 'project'].includes(n.kind),
-  )) {
-    const key = JSON.stringify([node.accountId || '', node.kind]);
-    groups.set(key, [...(groups.get(key) || []), node]);
+  // A file or branch shared by tasks still has one bubble. Prefer an observed
+  // change to a declared scope; keep all the other task links to that bubble.
+  for (const edge of edges) {
+    if (edge.kind === 'owns') claim(edge.source, edge.target);
+    if (['changed', 'contributes'].includes(edge.kind))
+      claim(edge.target, edge.source);
   }
-  for (const group of groups.values()) {
-    const anchor = group[0].accountId ? points[group[0].accountId] : undefined;
-    const baseAngle = anchor
-      ? Math.atan2(anchor.y - graphCenter.y, anchor.x - graphCenter.x)
-      : 0;
-    const sector = Math.min(
-      1.6,
-      ((Math.PI * 2) / Math.max(1, accounts.length)) * 0.75,
+  for (const edge of edges)
+    if (edge.kind === 'scope') claim(edge.target, edge.source);
+  const members = new Map<string, GraphNode[]>(
+    tasks.map((task) => [task.id, []]),
+  );
+  for (const node of nodes) {
+    if (node.kind !== 'task')
+      members.get(clusterFor.get(node.id) || '')?.push(node);
+  }
+  const clusters: TaskCluster[] = [];
+  let cursor = 0,
+    extent = 110;
+  for (const task of tasks) {
+    const group = members.get(task.id)!;
+    const radius = 30 + 9 * Math.sqrt(group.length);
+    let center: Point;
+    do {
+      cursor++;
+      center = around(
+        graphCenter,
+        31 * Math.sqrt(cursor),
+        goldenAngle * cursor - Math.PI / 2,
+      );
+    } while (
+      distance(graphCenter, center) < radius + 94 ||
+      clusters.some(
+        (prior) => distance(center, prior.center) < radius + prior.radius + 24,
+      )
     );
+    points[task.id] = center;
     group.forEach((node, i) => {
-      const angle =
-        baseAngle +
-        (i - (group.length - 1) / 2) *
-          Math.min(0.25, sector / Math.max(1, group.length - 1));
-      const baseRadius = { agent: 245, task: 165, branch: 95, file: 275 }[
-        node.kind as 'agent' | 'task' | 'branch' | 'file'
-      ];
-      const radius = Math.min(310, baseRadius + (i % 2 ? 9 : -9));
-      points[node.id] = {
-        x: graphCenter.x + Math.cos(angle) * radius,
-        y: graphCenter.y + Math.sin(angle) * radius,
-      };
+      // A sunflower distribution makes a round, evenly spaced cloud without rings of labels.
+      points[node.id] = around(
+        center,
+        14 + 8 * Math.sqrt(i + 0.5),
+        goldenAngle * i + cursor,
+      );
     });
+    clusters.push({
+      id: task.id,
+      label: task.label,
+      center,
+      radius,
+      color: hues[clusters.length % hues.length],
+      nodeIds: [task.id, ...group.map((node) => node.id)],
+    });
+    extent = Math.max(extent, distance(graphCenter, center) + radius);
   }
-  return points;
+  const accounts = nodes.filter((node) => node.kind === 'account');
+  const accountRadius = Math.max(330, extent + 60);
+  Object.assign(
+    points,
+    accountAnchors(
+      accounts.map((node) => node.id),
+      accountRadius,
+    ),
+  );
+  const loose = nodes.filter((node) => !points[node.id]);
+  loose.forEach((node, i) => {
+    points[node.id] = around(graphCenter, accountRadius - 25, goldenAngle * i);
+  });
+  // Preserve world-space spacing on large projects and zoom out to fit the canvas.
+  const fitScale = Math.min(1, 370 / accountRadius);
+  return { positions: points, clusters, clusterFor, fitScale };
 }
+
+export function curvedLink(source: Point, target: Point, direction = 1) {
+  const dx = target.x - source.x,
+    dy = target.y - source.y;
+  const length = Math.max(1, Math.hypot(dx, dy));
+  const bow = Math.min(52, length * 0.13) * direction;
+  const x = (source.x + target.x) / 2 - (dy / length) * bow;
+  const y = (source.y + target.y) / 2 + (dx / length) * bow;
+  return `M ${source.x} ${source.y} Q ${x} ${y} ${target.x} ${target.y}`;
+}
+
 export function viewToWorld(point: Point, pan: Point, scale: number): Point {
   return {
     x: (point.x - pan.x - graphCenter.x) / scale + graphCenter.x,

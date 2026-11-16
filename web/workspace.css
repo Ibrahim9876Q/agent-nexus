@@ -971,7 +971,13 @@ kbd {
   min-height: 0;
   position: relative;
   border: 1px solid var(--line);
-  background: #06101c80;
+  background:
+    radial-gradient(ellipse at 50% 44%, #25223475, transparent 68%),
+    radial-gradient(circle at 70% 22%, #b4bfd819 0.7px, transparent 1px) 0 0 /
+      83px 71px,
+    radial-gradient(circle at 20% 74%, #b4bfd810 0.65px, transparent 1px) 17px
+      23px / 57px 67px,
+    #101017;
   border-radius: 20px;
   overflow: hidden;
 }
@@ -981,36 +987,52 @@ kbd {
   touch-action: none;
 }
 .edge {
-  stroke: #5d8cb2;
-  stroke-width: 0.7;
-  opacity: 0.35;
+  fill: none;
+  stroke: currentColor;
+  color: #a6a9ca;
+  stroke-width: 0.85;
+  opacity: 0.17;
+  pointer-events: none;
 }
-.edge.communicates {
-  stroke: #69d4ef;
-  stroke-dasharray: 3 5;
-  opacity: 0.5;
+.edge.inside {
+  opacity: 0.26;
 }
-.edge.delegates {
-  stroke: #69c8ff;
-  stroke-width: 1.5;
+.edge.related {
+  opacity: 0.72;
+  stroke-width: 1.35;
 }
-.graph-node {
-  cursor: pointer;
-  fill: #a9c9e2;
+.cluster-halo {
+  cursor: grab;
+  pointer-events: all;
 }
-.graph-node circle {
-  stroke: #0b1e32;
-  stroke-width: 3;
+.node-core {
+  fill: currentColor;
+  stroke: #fff;
+  stroke-opacity: 0.26;
+  stroke-width: 1;
+}
+.node-aura {
+  opacity: 0.19;
+  pointer-events: none;
+}
+.graph-node.task .node-aura,
+.graph-node.repository .node-aura,
+.graph-node.account .node-aura {
+  opacity: 0.37;
 }
 .graph-node text {
   font: calc(11px * var(--font-scale, 1)) 'JetBrains Mono';
-  fill: #96b8d5;
+  fill: #ccd5ec;
+  paint-order: stroke;
+  stroke: #111019;
+  stroke-width: 3px;
   pointer-events: none;
 }
-.graph-node:hover circle,
-.graph-node.picked circle {
-  stroke: #bcf1ff;
-  stroke-width: 3;
+.graph-node:hover .node-core,
+.graph-node:focus-visible .node-core,
+.graph-node.picked .node-core {
+  stroke-opacity: 1;
+  stroke-width: 2;
 }
 .graph-node:hover text,
 .graph-node.picked text {
@@ -1466,12 +1488,42 @@ kbd {
   stroke: transparent;
   pointer-events: all;
 }
-.account-orbit {
-  fill: none;
-  stroke: #67c8e9;
-  stroke-width: 1;
-  opacity: 0.12;
-  pointer-events: none;
+.graph-topics {
+  margin-bottom: 18px;
+  display: grid;
+  gap: 4px;
+  max-height: 185px;
+  overflow: auto;
+}
+.graph-topics button {
+  justify-content: start;
+  padding: 5px 7px;
+  gap: 8px;
+  background: transparent;
+  color: #c1dced;
+  border-color: transparent;
+  font-size: 0.73rem;
+  text-align: left;
+}
+.graph-topics button:hover,
+.graph-topics button[aria-pressed='true'] {
+  background: #69c8ff14;
+}
+.graph-topics button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graph-topics button i {
+  flex: 0 0 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+.graph-topics button small {
+  margin-left: auto;
+  color: #8faec7;
 }
 .graph-help {
   position: absolute;

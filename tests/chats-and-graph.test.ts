@@ -10,6 +10,7 @@ import {
   accountAnchors,
   graphCenter,
   graphLayout,
+  curvedLink,
   viewToWorld,
   workspaceGraph,
 } from '../web/graph-model.ts';
@@ -254,7 +255,8 @@ test('Brain places repository centrally and all accounts at regular outer polygo
     const second = engine.addTask(agent.id, 'Next', 'Next');
     store.put('tasks', { ...second, branch: 'shared-branch' });
     const graph = workspaceGraph(engine.snapshot(), project.id, [
-      { taskId: first.id, files: ['app.ts'], base: '1234' },
+      { taskId: first.id, files: ['app.ts', 'api/index.ts'], base: '1234' },
+      { taskId: second.id, files: ['app.ts', 'web/view.tsx'], base: '1234' },
     ]);
     assert.ok(
       graph.nodes.some((n) => n.id === unused.id),
@@ -265,7 +267,50 @@ test('Brain places repository centrally and all accounts at regular outer polygo
       1,
       'Shared branch is represented once',
     );
-    const layout = graphLayout(graph.nodes);
+    const {
+      positions: layout,
+      clusters,
+      clusterFor,
+    } = graphLayout(graph.nodes, graph.edges);
+    assert.equal(clusters.length, 2);
+    const [firstCluster, secondCluster] = clusters;
+    assert.ok(
+      Math.hypot(
+        firstCluster.center.x - secondCluster.center.x,
+        firstCluster.center.y - secondCluster.center.y,
+      ) >
+        firstCluster.radius + secondCluster.radius,
+    );
+    assert.notEqual(firstCluster.color, secondCluster.color);
+    for (const cluster of clusters) {
+      assert.deepEqual(layout[cluster.id], cluster.center);
+      for (const member of cluster.nodeIds) {
+        assert.equal(clusterFor.get(member), cluster.id);
+        assert.ok(
+          Math.hypot(
+            layout[member].x - cluster.center.x,
+            layout[member].y - cluster.center.y,
+          ) < cluster.radius,
+        );
+      }
+    }
+    const appFile = graph.nodes.filter((n) => n.label === 'app.ts');
+    assert.equal(appFile.length, 1);
+    assert.equal(clusterFor.get(appFile[0].id), first.id);
+    assert.ok(
+      graph.edges.some(
+        (edge) => edge.source === second.id && edge.target === appFile[0].id,
+      ),
+    );
+    assert.equal(
+      clusterFor.get(agent.id),
+      second.id,
+      'The worker joins its current task',
+    );
+    assert.match(
+      curvedLink({ x: 0, y: 0 }, { x: 100, y: 0 }),
+      /^M 0 0 Q 50 13 100 0$/,
+    );
     assert.deepEqual(layout[repo.id], graphCenter);
     assert.ok(
       graph.nodes.every(
@@ -291,4 +336,47 @@ test('node dragging coordinates account for both zoom and pan', () => {
   assert.deepEqual(viewToWorld(view, pan, scale), world);
   const moved = viewToWorld({ x: view.x + 100, y: view.y - 50 }, pan, scale);
   assert.deepEqual(moved, { x: world.x + 40, y: world.y - 20 });
+});
+
+test('Brain packs dense task clouds without overlapping them or squeezing individual files together', () => {
+  const nodes: import('../web/graph-model.ts').GraphNode[] = [];
+  const edges: import('../web/graph-model.ts').GraphEdge[] = [];
+  for (let i = 0; i < 16; i++) {
+    const taskId = 'task-' + i;
+    nodes.push({ id: taskId, kind: 'task', label: taskId, detail: '' });
+    for (let j = 0; j < 70; j++) {
+      const fileId = taskId + '/file-' + j;
+      nodes.push({ id: fileId, kind: 'file', label: fileId, detail: '' });
+      edges.push({ source: taskId, target: fileId, kind: 'changed' });
+    }
+  }
+  const layout = graphLayout(nodes, edges);
+  assert.equal(layout.clusters.length, 16);
+  assert.ok(layout.fitScale < 1, 'Dense data fits by zooming out');
+  const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+  for (const [index, cluster] of layout.clusters.entries()) {
+    assert.equal(cluster.nodeIds.length, 71);
+    const positions = cluster.nodeIds.map((id) => layout.positions[id]);
+    assert.ok(
+      positions.every(
+        (point) => distance(point, cluster.center) < cluster.radius,
+      ),
+    );
+    assert.ok(
+      positions.every((point, i) =>
+        positions.slice(i + 1).every((other) => distance(point, other) > 7.2),
+      ),
+    );
+    assert.ok(
+      layout.clusters
+        .slice(index + 1)
+        .every(
+          (other) =>
+            distance(cluster.center, other.center) >
+            cluster.radius + other.radius,
+        ),
+    );
+  }
+  assert.deepEqual(graphLayout(nodes, edges).positions, layout.positions);
 });

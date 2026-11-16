@@ -32,7 +32,7 @@ npm install -g @openai/codex
 
 Use **＋** next to **Chats** to start another conversation in the same workspace. Each sidebar entry opens one chat; its worker tasks stay inside that chat. Hover a chat and click the pencil to rename it. Account usage is shown as two percentages, side by side.
 
-In **Brain**, use **Names & details** to toggle names for each node type. The repository starts in the center and accounts sit around it. Drag any bubble to move it, drag the background to pan, and scroll to zoom. Label choices and node positions are saved for that workspace.
+In **Brain**, each task starts as a colored cluster of connected workers, branches, and files. Drag a node to move it or drag its surrounding glow to move the cluster. Drag empty space to pan, scroll to zoom, and use **Names & details** to jump to a cluster or toggle labels. Your changes to the layout are saved per workspace.
 
 The app starts empty. Opening a workspace does not start AI work until you send a prompt. Account sign-in happens through the official browser flow.
 

@@ -13,7 +13,11 @@ HTTP and HTTPS links in chat open in your default browser, including local previ
 
 The sidebar groups work into named chats. **＋** starts a new chat in the selected workspace; the pencil renames it. Each chat has its own coordinator conversations, command history, tasks, and drafts. Existing workspace history migrates into one chat without splitting it by task. Chats share the workspace's repository and account pool. Project pause/resume affects every chat in that workspace.
 
-Account quota windows show provider-reported used percentages side by side, without bars. Missing telemetry stays unknown. Brain's **Names & details** panel toggles labels for repository, project, account, agent, task, branch, and file nodes. All registered accounts start on the outside: two form a vertical line, three a triangle, four a square, and larger pools a regular polygon. The repository starts at the center. Every node can be dragged independently, including accounts and the repository; arrow keys also move focused nodes. Node positions and label choices persist locally per workspace, and **Reset layout** restores the starting arrangement.
+Account quota windows show provider-reported used percentages side by side, without bars. Missing telemetry stays unknown.
+
+Brain groups each task with its worker, branch, and files in a colored, softly glowing cluster. A shared file or branch appears once and keeps its links to every related task. The repository starts at the center and registered accounts sit around the outside. Hover a node to see its name and highlight its links. **Names & details** lets you jump to a cluster or toggle labels by record type.
+
+Drag a node to move it independently, or drag the surrounding glow (or Shift+drag a node) to move its cluster. Arrow keys move a focused node; Shift+arrow keys move its cluster. Positions and label choices are saved per workspace. **Reset layout** restores the starting arrangement.
 
 Sign-in begins inside the app and completes in the official system-browser flow. Use Sign in, follow the secure link, then Verify. Sign into accounts sequentially. Ready status means authentication exists; a completed task establishes actual inference access. Credentials are isolated per account and never copied from another application.
 
