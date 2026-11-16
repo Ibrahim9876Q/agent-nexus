@@ -7,6 +7,10 @@ The packaged Windows application is `release-desktop/Agent Nexus 0.2.0.exe`. Nod
 
 Command, Brain and Agents are in the sidebar. Use its panel button or Ctrl+B to open and close it. Brain shows project records and Git-observed contributions, including delegation and dependencies. Agents shows real runtime output, errors and messages. Account readiness is refreshed on restart, but completed or interrupted work is not silently rerun.
 
+Left-click the **↗** button beside Command, Brain, or Agents to open that view in its own desktop window. It starts with the same workspace and chat. Arrange the windows with Windows Snap to see them at once. Each window has its own navigation and connects to the same local engine; closing one leaves the others running.
+
+HTTP and HTTPS links in chat open in your default browser, including local previews on another port. A local link still needs a running server at that address.
+
 The sidebar groups work into named chats. **＋** starts a new chat in the selected workspace; the pencil renames it. Each chat has its own coordinator conversations, command history, tasks, and drafts. Existing workspace history migrates into one chat without splitting it by task. Chats share the workspace's repository and account pool. Project pause/resume affects every chat in that workspace.
 
 Account quota windows show provider-reported used percentages side by side, without bars. Missing telemetry stays unknown. Brain's **Names & details** panel toggles labels for repository, project, account, agent, task, branch, and file nodes. All registered accounts start on the outside: two form a vertical line, three a triangle, four a square, and larger pools a regular polygon. The repository starts at the center. Every node can be dragged independently, including accounts and the repository; arrow keys also move focused nodes. Node positions and label choices persist locally per workspace, and **Reset layout** restores the starting arrangement.
@@ -17,7 +21,7 @@ Adding a new empty project folder initializes Git on `main` and creates an empty
 
 Chat is the default mode: one coordinator answers naturally and can plan or delegate when useful. Every message retains its own reply; additional messages during a turn queue for their own reply. Direct / override explicitly steers matching workers. The live status line and animated send-button dots show actual running/queued work; pause and approval waits are distinguished. Stop interrupts this chat, and Resume / continue reactivates unfinished work. A new message can resume restart-held work in its chat without releasing other chats. Each account's model, reasoning effort, and approval profile applies on its next turn. See [chat and model controls](CHAT_AND_MODELS.md).
 
-Live source data is `.nexus/live/`; packaged live data is `workspace-live/` under the OS application-data directory. Existing legacy demo data is preserved in its old location and is not loaded. The renderer has no Node integration and uses a loopback-only backend; the repository folder picker exposes only a narrow desktop IPC method.
+Live source data is `.nexus/live/`; packaged live data is `workspace-live/` under the OS application-data directory. Existing legacy demo data is preserved in its old location and is not loaded. The renderer has no Node integration and uses a loopback-only backend. The desktop bridge validates requests to pick a folder, open a browser link, or pop out a Nexus view.
 
 ## Mock installation
 

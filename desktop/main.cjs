@@ -1,6 +1,8 @@
 const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const { fork } = require('node:child_process');
 const path = require('node:path');
+const { externalLink, trustedPage, viewUrl } = require('./navigation.cjs');
+const windows = new Set();
 let worker,
   window,
   quitting = false;
@@ -13,8 +15,9 @@ if (process.env.NEXUS_MOCK_INSTALLATION === '1')
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => {
-    window?.show();
-    window?.focus();
+    const existing = window || windows.values().next().value;
+    existing?.show();
+    existing?.focus();
   });
   app.whenReady().then(() => {
     const mock = process.env.NEXUS_MOCK_INSTALLATION === '1';
@@ -56,71 +59,91 @@ else {
       if (msg.type !== 'ready') return;
       clearTimeout(startup);
       const origin = `http://127.0.0.1:${msg.port}`;
-      window = new BrowserWindow({
-        width: 1480,
-        height: 960,
-        minWidth: 900,
-        minHeight: 640,
-        backgroundColor: '#070d16',
-        ...(process.platform === 'win32'
-          ? {
-              titleBarStyle: 'hidden',
-              titleBarOverlay: {
-                color: '#070d16',
-                symbolColor: '#c1ddf3',
-                height: 52,
-              },
-            }
-          : {}),
-        title: 'Agent Nexus',
-        autoHideMenuBar: true,
-        webPreferences: {
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          preload: path.join(__dirname, 'preload.cjs'),
-        },
-      });
-      const external = (url) => {
-        try {
-          const u = new URL(url);
-          if (
-            u.protocol === 'https:' &&
-            [
-              'auth.openai.com',
-              'auth0.openai.com',
-              'chatgpt.com',
-              'github.com',
-            ].includes(u.hostname)
-          )
-            void shell.openExternal(url);
-        } catch {}
+      const popouts = new Map();
+      const createWindow = (url, view) => {
+        const pane = new BrowserWindow({
+          width: view ? 720 : 1480,
+          height: view ? 780 : 960,
+          minWidth: 360,
+          minHeight: 380,
+          backgroundColor: '#070d16',
+          ...(process.platform === 'win32'
+            ? {
+                titleBarStyle: 'hidden',
+                titleBarOverlay: {
+                  color: '#070d16',
+                  symbolColor: '#c1ddf3',
+                  height: 52,
+                },
+              }
+            : {}),
+          title: view ? `Agent Nexus · ${view}` : 'Agent Nexus',
+          autoHideMenuBar: true,
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+            preload: path.join(__dirname, 'preload.cjs'),
+          },
+        });
+        windows.add(pane);
+        pane.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+        pane.webContents.on('will-frame-navigate', (event) => {
+          if (!event.isMainFrame || !trustedPage(event.url, origin))
+            event.preventDefault();
+        });
+        pane.webContents.on('will-redirect', (event) => {
+          if (!event.isMainFrame || !trustedPage(event.url, origin))
+            event.preventDefault();
+        });
+        pane.on('closed', () => {
+          windows.delete(pane);
+          if (window === pane) window = undefined;
+          if (view) popouts.delete(url);
+        });
+        void pane.loadURL(url).catch((error) => {
+          if (!pane.isDestroyed())
+            dialog.showErrorBox('Could not open Nexus', error.message);
+        });
+        return pane;
       };
-      window.webContents.setWindowOpenHandler(({ url }) => {
-        external(url);
-        return { action: 'deny' };
-      });
-      window.webContents.on('will-navigate', (e, url) => {
-        if (!url.startsWith(origin + '/')) {
-          e.preventDefault();
-          external(url);
-        }
-      });
-      window.webContents.session.on('will-download', (e) => e.preventDefault());
-      ipcMain.handle('nexus:choose-repository', async (event) => {
+      const owner = (event) => {
+        const pane = BrowserWindow.fromWebContents(event.sender);
         if (
-          event.sender !== window.webContents ||
-          event.sender.getURL().split('/').slice(0, 3).join('/') !== origin
+          !pane ||
+          !windows.has(pane) ||
+          !event.senderFrame ||
+          event.senderFrame !== event.sender.mainFrame ||
+          !trustedPage(event.senderFrame.url, origin)
         )
           throw new Error('Untrusted window');
-        const result = await dialog.showOpenDialog(window, {
+        return pane;
+      };
+      ipcMain.handle('nexus:choose-repository', async (event) => {
+        const result = await dialog.showOpenDialog(owner(event), {
           properties: ['openDirectory'],
           title: 'Choose a project folder',
         });
         return result.canceled ? null : result.filePaths[0];
       });
-      window.loadURL(origin);
-      window.on('closed', () => app.quit());
+      ipcMain.handle('nexus:open-link', async (event, value) => {
+        owner(event);
+        const url = externalLink(value, origin);
+        if (!url)
+          throw new Error('Only external HTTP and HTTPS links can be opened.');
+        await shell.openExternal(url);
+      });
+      ipcMain.handle('nexus:open-view', (event, selection) => {
+        owner(event);
+        const url = viewUrl(origin, selection);
+        const prior = popouts.get(url);
+        if (prior) {
+          prior.show();
+          prior.focus();
+        } else popouts.set(url, createWindow(url, selection.view));
+      });
+      window = createWindow(origin);
+      window.webContents.session.on('will-download', (e) => e.preventDefault());
     });
     worker.on('exit', (code) => {
       if (!quitting) {

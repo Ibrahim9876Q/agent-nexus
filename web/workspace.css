@@ -1849,3 +1849,31 @@ kbd {
 .chat-author strong {
   text-transform: none;
 }
+
+.side-nav-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.side-nav-row > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.side-nav-row > .nav-popout {
+  flex: 0 0 34px;
+  justify-content: center;
+  padding: 0;
+}
+.side-nav-row > .nav-popout svg {
+  width: 16px;
+  height: 16px;
+}
+.side-nav-row > .nav-popout:hover,
+.side-nav-row > .nav-popout:focus-visible {
+  color: var(--accent);
+}
+.link-error {
+  display: block;
+  color: #ffbbad;
+  font-size: 0.85rem;
+}

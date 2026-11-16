@@ -3,6 +3,7 @@ import type { Tables } from '../src/types';
 import { commandTasks, workSummary } from '../src/work-summary';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ExternalLink } from './ExternalLink';
 import { accountLabel, TeamActivity } from './TeamActivity';
 
 export function ChatResponse({
@@ -88,9 +89,7 @@ export function ChatResponse({
             components={{
               img: ({ alt }) => <em>{alt || 'Image'}</em>,
               a: ({ href, children }) => (
-                <a href={href} target="_blank" rel="noreferrer">
-                  {children}
-                </a>
+                <ExternalLink href={href}>{children}</ExternalLink>
               ),
             }}
           >

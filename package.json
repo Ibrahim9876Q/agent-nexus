@@ -59,6 +59,7 @@
     },
     "files": [
       "main.cjs",
+      "navigation.cjs",
       "package.json",
       "preload.cjs"
     ],

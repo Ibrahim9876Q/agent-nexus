@@ -19,6 +19,7 @@ import { ImageAttachment } from './ImageAttachment';
 import { AccountCapacity } from './AccountCapacity';
 import { AccountSettings } from './AccountSettings';
 import { ChatResponse } from './ChatResponse';
+import { ExternalLink } from './ExternalLink';
 import { chatActivity } from '../src/chat-activity';
 import '@fontsource/jetbrains-mono/latin-400.css';
 import '@fontsource/jetbrains-mono/latin-500.css';
@@ -39,6 +40,9 @@ export type State = {
   attachments?: Attachment[];
 };
 export { api } from './api';
+const views = ['Command', 'Brain', 'Agents'] as const;
+const entry = new URLSearchParams(location.search);
+const initialView = views.find((view) => view === entry.get('view'));
 function NexusLogo() {
   return (
     <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
@@ -102,6 +106,9 @@ function Icon({ name }: { name: string }) {
         </>
       )}
       {name === 'plus' && <path d="M12 5v14M5 12h14" />}
+      {name === 'popout' && (
+        <path d="M13 4h7v7m0-7-9 9m-1-7H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+      )}
       {name === 'send' && <path d="M12 19V5m-6 6 6-6 6 6" />}
     </svg>
   );
@@ -117,9 +124,11 @@ function WorkingDots() {
 }
 function App() {
   const [s, setS] = useState<State>(),
-    [tab, setTab] = useState('Command'),
-    [project, setProject] = useState(''),
-    [chatId, setChatId] = useState(''),
+    [tab, setTab] = useState<string>(initialView || 'Command'),
+    [project, setProject] = useState(
+      initialView ? entry.get('project') || '' : '',
+    ),
+    [chatId, setChatId] = useState(initialView ? entry.get('chat') || '' : ''),
     [editingChat, setEditingChat] = useState(''),
     [chatTitleDraft, setChatTitleDraft] = useState(''),
     [target, setTarget] = useState('all'),
@@ -141,12 +150,15 @@ function App() {
       }
     }),
     [shortcuts, setShortcuts] = useState(false),
-    [sidebarOpen, setSidebarOpen] = useState(true),
+    [sidebarOpen, setSidebarOpen] = useState(!initialView),
     [busy, setBusy] = useState(false),
     [now, setNow] = useState(Date.now()),
     [imageDrafts, setImageDrafts] = useState<Record<string, string[]>>({}),
     [uploading, setUploading] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (initialView) document.title = `Agent Nexus · ${tab}`;
+  }, [tab]);
   const currentChat = useRef(chatId);
   currentChat.current = chatId;
   const draftKey = chatId || `new-${project}`;
@@ -158,10 +170,16 @@ function App() {
   const setPrompt = (value: string) =>
     setDrafts((old) => ({ ...old, [draftKey]: value }));
   useEffect(() => {
-    const chats = s?.chats?.filter((c) => c.projectId === project) || [];
+    if (!s) return;
+    if (project && !s.projects.some((item) => item.id === project)) {
+      setProject('');
+      setChatId('');
+      return;
+    }
+    const chats = s.chats.filter((c) => c.projectId === project);
     if (chats.some((c) => c.id === chatId)) {
       try {
-        localStorage.setItem(`nexus-chat-${project}`, chatId);
+        if (!initialView) localStorage.setItem(`nexus-chat-${project}`, chatId);
       } catch {}
       return;
     }
@@ -170,7 +188,7 @@ function App() {
       saved = localStorage.getItem(`nexus-chat-${project}`) || '';
     } catch {}
     setChatId(chats.find((c) => c.id === saved)?.id || chats[0]?.id || '');
-  }, [project, chatCatalog, chatId]);
+  }, [project, chatCatalog, chatId, Boolean(s)]);
   const chatScroll = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
   useEffect(() => {
@@ -258,6 +276,18 @@ function App() {
       return result;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+  async function popOut(view: (typeof views)[number]) {
+    setError('');
+    try {
+      await window.nexusDesktop?.openView({ view, project, chat: chatId });
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Could not open the workspace view.',
+      );
     }
   }
   if (!s)
@@ -404,19 +434,31 @@ function App() {
             </button>
           </div>
           <nav className="side-nav" aria-label="Main navigation">
-            {['Command', 'Brain', 'Agents'].map((name) => (
-              <button
-                key={name}
-                aria-current={tab === name ? 'page' : undefined}
-                className={tab === name ? 'selected' : ''}
-                onClick={() => setTab(name)}
-              >
-                <Icon name={name} />
-                <span>{name}</span>
-                {name === 'Agents' && agents.length > 0 && (
-                  <small>{agents.length}</small>
+            {views.map((name) => (
+              <div className="side-nav-row" key={name}>
+                <button
+                  aria-current={tab === name ? 'page' : undefined}
+                  className={tab === name ? 'selected' : ''}
+                  onClick={() => setTab(name)}
+                >
+                  <Icon name={name} />
+                  <span>{name}</span>
+                  {name === 'Agents' && agents.length > 0 && (
+                    <small>{agents.length}</small>
+                  )}
+                </button>
+                {window.nexusDesktop && (
+                  <button
+                    type="button"
+                    className="nav-popout"
+                    aria-label={`Open ${name} in a new window`}
+                    title={`Open ${name} in a new window`}
+                    onClick={() => void popOut(name)}
+                  >
+                    <Icon name="popout" />
+                  </button>
                 )}
-              </button>
+              </div>
             ))}
           </nav>
           <div className="sidebar-scroll">
@@ -643,10 +685,11 @@ function App() {
             </button>
           )}
           <span>
+            {initialView && project ? `${tab} · ` : ''}
             {project
               ? chats.find((c) => c.id === chatId)?.title ||
                 s.projects.find((p) => p.id === project)?.name
-              : tab === 'Command'
+              : tab === 'Command' && !initialView
                 ? ''
                 : tab}
           </span>
@@ -1300,14 +1343,9 @@ function App() {
             ))}
             {auth && (
               <div className="auth-actions">
-                <a
-                  className="auth-link"
-                  href={auth}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <ExternalLink className="auth-link" href={auth}>
                   Open secure ChatGPT sign-in ↗
-                </a>
+                </ExternalLink>
                 <button
                   type="button"
                   onClick={async () => {
