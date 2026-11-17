@@ -260,7 +260,12 @@ function TaskOutput({ task }: { task: Task }) {
                   </button>
                 ))}
               </div>
-              <div className="output-patch" aria-label="File diff">
+              <div
+                className="output-patch"
+                role="region"
+                aria-label="File diff"
+                tabIndex={0}
+              >
                 {patchFile !== file ? (
                   <p>Loading diff…</p>
                 ) : changes.patchError ? (
