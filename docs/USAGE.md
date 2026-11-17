@@ -9,7 +9,7 @@
 3. Send your first prompt in **Command**. Opening a project does not start any AI work by itself.
 4. Follow actual runtime output in **Agents** and contributions in **Brain**.
 
-Old sample data is preserved in its previous location and is not loaded by the live app. Fresh source installations use `.nexus/live`; the optional mock installation uses `.nexus/mock-installation`.
+Fresh desktop installations use the app-data workspace. Existing source installations can keep using their original `.nexus/live` workspace. The optional mock installation uses `.nexus/mock-installation`.
 
 ## Mock installation
 
@@ -191,14 +191,14 @@ npm.cmd install
 npm.cmd start
 ```
 
-| Launch mode                         | Private workspace state                                               |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| Source launcher / `npm run desktop` | `.nexus/live/` inside your checkout.                                  |
-| Mock source launcher                | `.nexus/mock-installation/` inside your checkout.                     |
-| Packaged EXE                        | Electron's per-user application-data folder, under `workspace-live/`. |
-| Browser/server mode                 | `.nexus/live/` by default; configurable through `NEXUS_DATA_DIR`.     |
+| Launch mode                         | Private workspace state                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------------------- |
+| Source launcher / `npm run desktop` | The registered live workspace, or app-data `workspace-live/` on a fresh installation. |
+| Mock source launcher                | `.nexus/mock-installation/` inside your checkout.                                     |
+| Packaged EXE                        | The same live workspace as the source desktop launcher.                               |
+| Browser/server mode                 | `.nexus/live/` by default; configurable through `NEXUS_DATA_DIR`.                     |
 
-These locations contain the database, account homes, conversations, worktrees, simulation repositories, and optional notes. Source and packaged launches use separate workspace locations. A fresh packaged app can therefore look empty even if you tested from source.
+These locations contain the database, account homes, conversations, worktrees, simulation repositories, and optional notes. Launch the updated desktop app from your original checkout once to register an existing workspace for both desktop launchers. Keep that folder in place.
 
 Do not copy credentials into your Git repository. Moving between laptops requires installing prerequisites, cloning/building Nexus, cloning your project repositories, and signing in again. Close the app before backing up private workspace state. Worktrees reference their original repository paths, so copying only `.nexus` is not a complete portable project migration.
 

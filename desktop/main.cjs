@@ -2,6 +2,7 @@ const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const { fork } = require('node:child_process');
 const path = require('node:path');
 const { externalLink, trustedPage, viewUrl } = require('./navigation.cjs');
+const { workspacePath } = require('./workspace-path.cjs');
 const windows = new Set();
 let worker,
   window,
@@ -20,10 +21,21 @@ else {
     existing?.focus();
   });
   app.whenReady().then(() => {
-    const mock = process.env.NEXUS_MOCK_INSTALLATION === '1';
     const root = app.isPackaged
       ? path.join(process.resourcesPath, 'app-runtime')
       : path.resolve(__dirname, '..');
+    let dataDir;
+    try {
+      dataDir = workspacePath({
+        userData: app.getPath('userData'),
+        root,
+        packaged: app.isPackaged,
+      });
+    } catch (error) {
+      dialog.showErrorBox('Could not open the Nexus workspace', error.message);
+      app.quit();
+      return;
+    }
     worker = fork(path.join(root, 'src/server.ts'), [], {
       execPath: 'node',
       execArgv: ['--import', 'tsx'],
@@ -31,12 +43,7 @@ else {
       env: {
         ...process.env,
         NEXUS_PORT: '0',
-        NEXUS_DATA_DIR: app.isPackaged
-          ? path.join(
-              app.getPath('userData'),
-              mock ? 'workspace-mock' : 'workspace-live',
-            )
-          : path.join(root, '.nexus', mock ? 'mock-installation' : 'live'),
+        NEXUS_DATA_DIR: dataDir,
       },
       silent: true,
     });

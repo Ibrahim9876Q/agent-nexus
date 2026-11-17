@@ -17,6 +17,16 @@ npm start
 
 On Windows PowerShell, use `npm.cmd install` and `npm.cmd start` if PowerShell blocks `npm`. After setup, use `npm start` or double-click **Launch Nexus.cmd** to open it again.
 
+To update an existing checkout, close all Nexus windows and run these commands from the folder you originally used to sign in.
+
+```powershell
+git pull --ff-only origin main
+npm.cmd ci
+npm.cmd start
+```
+
+The first updated launch remembers the original workspace on this PC. Subsequent launches from another checkout or the updated portable app reuse it, including saved accounts and chats. Keep the original workspace folder in place.
+
 ## Connect accounts and start working
 
 To run real agents, install the official Codex CLI once:

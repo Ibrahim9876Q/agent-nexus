@@ -61,7 +61,8 @@
       "main.cjs",
       "navigation.cjs",
       "package.json",
-      "preload.cjs"
+      "preload.cjs",
+      "workspace-path.cjs"
     ],
     "extraResources": [
       {
