@@ -27,7 +27,7 @@ test('external links allow browser destinations and local previews, but not shel
 test('pop-outs use distinct trusted app URLs and keep only a valid workspace and chat', () => {
   const project = '7d35466b-357e-424f-be54-b0071adf7339';
   const chat = '18e97d24-c9bd-4a9b-ab12-59430a5c989a';
-  for (const view of ['Command', 'Brain', 'Agents']) {
+  for (const view of ['Command', 'Brain', 'Agents', 'Output']) {
     const url = viewUrl(origin, {
       view,
       project,

@@ -1,15 +1,101 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readdir, realpath, stat } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { lstat, mkdir, readdir, realpath, stat } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 const exec = promisify(execFile);
-export async function git(cwd: string, ...args: string[]) {
+async function gitOutput(cwd: string, ...args: string[]) {
   return (
     await exec('git', ['-C', cwd, ...args], {
       windowsHide: true,
       maxBuffer: 2 * 1024 * 1024,
     })
-  ).stdout.trim();
+  ).stdout;
+}
+export async function git(cwd: string, ...args: string[]) {
+  return (await gitOutput(cwd, ...args)).trim();
+}
+
+export async function worktreeChanges(
+  worktree: string,
+  repositoryHead: string,
+) {
+  const base = await git(worktree, 'merge-base', repositoryHead, 'HEAD');
+  const [tracked, untracked] = await Promise.all([
+    gitOutput(worktree, 'diff', '--no-renames', '--name-only', '-z', base),
+    gitOutput(worktree, 'ls-files', '--others', '--exclude-standard', '-z'),
+  ]);
+  const files = new Set(tracked.split('\0').filter(Boolean));
+  return {
+    base,
+    files: [
+      ...[...files].map((path) => ({
+        path,
+        status: 'tracked' as const,
+      })),
+      ...untracked
+        .split('\0')
+        .filter((path) => path && !files.has(path))
+        .map((path) => ({ path, status: 'untracked' as const })),
+    ],
+  };
+}
+
+export async function worktreePatch(
+  worktree: string,
+  base: string,
+  file: { path: string; status: 'tracked' | 'untracked' },
+) {
+  if (file.status === 'tracked')
+    return gitOutput(
+      worktree,
+      '--literal-pathspecs',
+      'diff',
+      '--no-ext-diff',
+      '--no-textconv',
+      '--no-color',
+      '--no-renames',
+      base,
+      '--',
+      file.path,
+    );
+  const root = await realpath(worktree);
+  const path = resolve(root, file.path);
+  const info = await lstat(path);
+  const inside = relative(root, await realpath(path));
+  if (
+    !inside ||
+    inside === '..' ||
+    inside.startsWith('..' + sep) ||
+    isAbsolute(inside) ||
+    !info.isFile()
+  )
+    return 'Preview unavailable for this file type.';
+  try {
+    return await gitOutput(
+      worktree,
+      'diff',
+      '--no-index',
+      '--no-ext-diff',
+      '--no-textconv',
+      '--no-color',
+      '--',
+      '/dev/null',
+      './' + file.path,
+    );
+  } catch (error) {
+    // Git returns exit 1 when --no-index finds differences.
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 1 &&
+      'stdout' in error &&
+      typeof error.stdout === 'string' &&
+      error.stdout
+    )
+      return error.stdout;
+    throw error;
+  }
 }
 export class GitService {
   private preparations = new Map<string, Promise<string>>();

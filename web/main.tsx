@@ -19,6 +19,7 @@ import { ImageAttachment } from './ImageAttachment';
 import { AccountCapacity } from './AccountCapacity';
 import { AccountSettings } from './AccountSettings';
 import { ChatResponse } from './ChatResponse';
+import { OutputView } from './OutputView';
 import { ExternalLink } from './ExternalLink';
 import { chatActivity } from '../src/chat-activity';
 import '@fontsource/jetbrains-mono/latin-400.css';
@@ -40,7 +41,7 @@ export type State = {
   attachments?: Attachment[];
 };
 export { api } from './api';
-const views = ['Command', 'Brain', 'Agents'] as const;
+const views = ['Command', 'Brain', 'Agents', 'Output'] as const;
 const entry = new URLSearchParams(location.search);
 const initialView = views.find((view) => view === entry.get('view'));
 function NexusLogo() {
@@ -96,6 +97,12 @@ function Icon({ name }: { name: string }) {
         <>
           <circle cx="9" cy="8" r="3" />
           <path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2" />
+        </>
+      )}
+      {name === 'Output' && (
+        <>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m7 9 3 3-3 3m6 0h4" />
         </>
       )}
       {name === 'settings' && (
@@ -1022,6 +1029,7 @@ function App() {
             }}
           />
         )}
+        {tab === 'Output' && <OutputView key={chatId} tasks={tasks} />}
         {tab === 'Agents' && (
           <div className="agents-view">
             <div className="agent-tabs">

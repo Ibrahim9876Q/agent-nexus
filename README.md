@@ -44,6 +44,8 @@ Use **＋** next to **Chats** to start another conversation in the same workspac
 
 In **Brain**, each task starts as a colored cluster of connected workers, branches, and files. Drag a node to move it or drag its surrounding glow to move the cluster. Drag empty space to pan, scroll to zoom, and use **Names & details** to jump to a cluster or toggle labels. Your changes to the layout are saved per workspace.
 
+Open **Output** to view a task’s Git changes or its command and edit activity. The Changes view refreshes while it is open.
+
 The app starts empty. Opening a workspace does not start AI work until you send a prompt. Account sign-in happens through the official browser flow.
 
 In **Workspace & accounts**, each account has **Model**, **Reasoning effort**, and **Approvals** controls. Click **Save settings** to apply them to its next turn. Normal chat uses one coordinator and brings in other accounts when useful. Replies include collapsible thinking summaries and a work/usage footer. See [chat and model controls](docs/CHAT_AND_MODELS.md).

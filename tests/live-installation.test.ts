@@ -160,6 +160,47 @@ test('live server starts empty and refuses simulation and mock accounts', async 
     );
     assert.equal(configured.status, 200);
     assert.equal((await configured.json()).autoHandoffUsage, false);
+
+    await writeFile(join(folder, 'tracked.txt'), 'before\n');
+    await git(folder, 'add', 'tracked.txt');
+    await git(folder, 'commit', '-m', 'Add fixture file');
+    const agent = app.engine.addAgent(
+      account.id,
+      project.id,
+      'worker',
+      undefined,
+      'workspace-write',
+      chatA.id,
+    );
+    const task = app.engine.addTask(agent.id, 'Show changes', 'Fixture only');
+    const worktree = await app.engine.git.worktree(folder, task.id);
+    app.store.put('tasks', {
+      ...task,
+      worktree: worktree.path,
+      status: 'completed',
+    });
+    await writeFile(join(worktree.path, 'tracked.txt'), 'after\n');
+    await writeFile(
+      join(worktree.path, 'new file.ts'),
+      'export const value = 1;\n',
+    );
+    const changes = base + '/api/tasks/' + task.id + '/changes';
+    assert.equal((await fetch(changes)).status, 401);
+    const list = await (await fetch(changes, { headers })).json();
+    assert.deepEqual(list.files, [
+      { path: 'tracked.txt', status: 'tracked' },
+      { path: 'new file.ts', status: 'untracked' },
+    ]);
+    const preview = async (file: string) =>
+      (
+        await fetch(changes + '?' + new URLSearchParams({ file }), { headers })
+      ).json();
+    assert.match((await preview('tracked.txt')).patch, /-before\r?\n\+after/);
+    assert.match(
+      (await preview('new file.ts')).patch,
+      /\+export const value = 1/,
+    );
+    assert.equal((await preview('../tracked.txt')).patch, null);
   } finally {
     await app.close();
   }

@@ -73,13 +73,13 @@ else {
           height: view ? 780 : 960,
           minWidth: 360,
           minHeight: 380,
-          backgroundColor: '#070d16',
+          backgroundColor: '#000000',
           ...(process.platform === 'win32'
             ? {
                 titleBarStyle: 'hidden',
                 titleBarOverlay: {
-                  color: '#070d16',
-                  symbolColor: '#c1ddf3',
+                  color: '#000000',
+                  symbolColor: '#ffffff',
                   height: 52,
                 },
               }

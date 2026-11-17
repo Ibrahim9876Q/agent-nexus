@@ -9,7 +9,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { Store } from './db/store.ts';
 import { Engine } from './engine.ts';
-import { git } from './integrations/git.ts';
+import { git, worktreeChanges, worktreePatch } from './integrations/git.ts';
 import { Knowledge } from './integrations/knowledge.ts';
 import { executeMock, seedSimulation } from './simulation.ts';
 import { runtimeConfig } from './runtime-mode.ts';
@@ -91,6 +91,39 @@ export async function createNexusServer(
     installation: mock ? 'mock' : 'live',
   });
   app.get('/api/state', (_req, res) => res.json(snapshot()));
+  app.get('/api/tasks/:id/changes', async (req, res) => {
+    const task = store.get('tasks', req.params.id);
+    if (!task.worktree) {
+      res.json({ files: [], patch: null });
+      return;
+    }
+    const requested = z
+      .string()
+      .min(1)
+      .max(4096)
+      .optional()
+      .parse(req.query.file);
+    const project = store.get('projects', task.projectId);
+    const repo = store.get('repos', project.repoId);
+    const head = await git(repo.path, 'rev-parse', 'HEAD');
+    const { base, files } = await worktreeChanges(task.worktree, head);
+    const file = files.find((entry) => entry.path === requested);
+    try {
+      const diff = file ? await worktreePatch(task.worktree, base, file) : null;
+      res.json({
+        files,
+        patch: diff?.slice(0, 120_000) ?? null,
+        truncated: (diff?.length ?? 0) > 120_000,
+      });
+    } catch {
+      res.json({
+        files,
+        patch: null,
+        patchError:
+          'Could not preview this file. It may have changed or be too large.',
+      });
+    }
+  });
   app.get('/api/projects/:id/contributions', async (req, res) => {
     const p = store.get('projects', req.params.id),
       repo = store.get('repos', p.repoId),

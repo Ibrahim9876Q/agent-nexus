@@ -1,4 +1,4 @@
-const views = new Set(['Command', 'Brain', 'Agents']);
+const views = new Set(['Command', 'Brain', 'Agents', 'Output']);
 const recordId = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 
 function externalLink(value, origin) {

@@ -53,7 +53,17 @@ export function AccountCapacity({
               }
             >
               <span>{label}</span>
-              <b aria-label={label + ' quota used'}>
+              <b
+                className="usage-value"
+                style={
+                  window
+                    ? {
+                        color: `hsl(${124 * (1 - Math.max(0, Math.min(100, window.usedPercent)) / 100)} 78% 67%)`,
+                      }
+                    : undefined
+                }
+                aria-label={label + ' quota used'}
+              >
                 {window ? Math.round(window.usedPercent) + '%' : '—'}
               </b>
             </div>
