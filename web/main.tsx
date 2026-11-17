@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type {
   Account,
@@ -19,7 +19,6 @@ import { ImageAttachment } from './ImageAttachment';
 import { AccountCapacity } from './AccountCapacity';
 import { AccountSettings } from './AccountSettings';
 import { ChatResponse } from './ChatResponse';
-import { OutputView } from './OutputView';
 import { ExternalLink } from './ExternalLink';
 import { chatActivity } from '../src/chat-activity';
 import '@fontsource/jetbrains-mono/latin-400.css';
@@ -41,6 +40,7 @@ export type State = {
   attachments?: Attachment[];
 };
 export { api } from './api';
+const OutputView = lazy(() => import('./OutputView'));
 const views = ['Command', 'Brain', 'Agents', 'Output'] as const;
 const entry = new URLSearchParams(location.search);
 const initialView = views.find((view) => view === entry.get('view'));
@@ -1029,7 +1029,13 @@ function App() {
             }}
           />
         )}
-        {tab === 'Output' && <OutputView key={chatId} tasks={tasks} />}
+        {tab === 'Output' && (
+          <Suspense
+            fallback={<div className="output-view">Loading Output…</div>}
+          >
+            <OutputView key={chatId} tasks={tasks} />
+          </Suspense>
+        )}
         {tab === 'Agents' && (
           <div className="agents-view">
             <div className="agent-tabs">

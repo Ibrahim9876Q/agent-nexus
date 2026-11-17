@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import type { Task } from '../src/types';
 import { api } from './api';
+import { ExternalLink } from './ExternalLink';
+import { highlightLines, highlightPatch } from './output-syntax';
 
 type Changes = {
   files: { path: string; status: 'tracked' | 'untracked' }[];
@@ -9,7 +12,7 @@ type Changes = {
   patchError?: string;
 };
 
-export function OutputView({ tasks }: { tasks: Task[] }) {
+export default function OutputView({ tasks }: { tasks: Task[] }) {
   const [selected, setSelected] = useState('');
   const task = tasks.find((item) => item.id === selected) || tasks.at(-1);
   if (!task)
@@ -37,6 +40,66 @@ export function OutputView({ tasks }: { tasks: Task[] }) {
       </header>
       <TaskOutput key={task.id} task={task} />
     </section>
+  );
+}
+
+function Tokens({
+  tokens,
+}: {
+  tokens: ReturnType<typeof highlightLines>[number];
+}) {
+  return tokens.map((token, index) => (
+    <span key={index} className={token.className}>
+      {token.text}
+    </span>
+  ));
+}
+
+function Syntax({ source, language }: { source: string; language: string }) {
+  const lines = useMemo(
+    () => highlightLines(source, language),
+    [source, language],
+  );
+  return lines.map((tokens, index) => (
+    <span key={index}>
+      <Tokens tokens={tokens} />
+      {index + 1 < lines.length && '\n'}
+    </span>
+  ));
+}
+
+function CodeDiff({
+  patch,
+  file,
+  truncated,
+}: {
+  patch?: string | null;
+  file: string;
+  truncated?: boolean;
+}) {
+  const rows = useMemo(
+    () => (patch ? highlightPatch(patch, file) : []),
+    [patch, file],
+  );
+  return (
+    <pre className="output-syntax">
+      {rows.length
+        ? rows.map((row, index) => (
+            <span className={'diff-row diff-' + row.kind} key={index}>
+              {row.tokens ? (
+                <>
+                  <span className="diff-marker">{row.text[0]}</span>
+                  <Tokens tokens={row.tokens} />
+                </>
+              ) : (
+                row.text
+              )}
+              {index + 1 < rows.length && '\n'}
+            </span>
+          ))
+        : 'No diff available.'}
+      {truncated && '\n[Preview truncated]'}
+    </pre>
   );
 }
 
@@ -103,7 +166,7 @@ function TaskOutput({ task }: { task: Task }) {
         )}
       </div>
       {view === 'activity' ? (
-        <div className="output-activity">
+        <div className="output-activity output-syntax">
           {task.activity?.length ? (
             <ol>
               {task.activity.map((item) => (
@@ -113,7 +176,20 @@ function TaskOutput({ task }: { task: Task }) {
                   </time>
                   <code>
                     {item.kind === 'command' ? '$ ' : ''}
-                    {item.label}
+                    {item.kind === 'command' ? (
+                      <Syntax
+                        source={item.label}
+                        language={
+                          /\$(?:env|script|global):|\b(?:get|set|new|remove|select)-(?:item|content|path|object|process)\b/i.test(
+                            item.label,
+                          )
+                            ? 'powershell'
+                            : 'bash'
+                        }
+                      />
+                    ) : (
+                      item.label
+                    )}
                   </code>
                   <small>
                     {item.exitCode != null
@@ -126,7 +202,36 @@ function TaskOutput({ task }: { task: Task }) {
           ) : (
             <p>No command, edit, or tool activity reported yet.</p>
           )}
-          {task.output && <pre aria-label="Agent response">{task.output}</pre>}
+          {task.output && (
+            <div className="output-response" aria-label="Agent response">
+              <ReactMarkdown
+                skipHtml
+                components={{
+                  img: ({ alt }) => <em>{alt || 'Image'}</em>,
+                  a: ({ href, children }) => (
+                    <ExternalLink href={href}>{children}</ExternalLink>
+                  ),
+                  code: ({ className, children }) => (
+                    <code className={className}>
+                      {typeof children === 'string' &&
+                      (className || children.endsWith('\n')) ? (
+                        <Syntax
+                          source={children}
+                          language={
+                            className?.match(/language-(\S+)/)?.[1] || ''
+                          }
+                        />
+                      ) : (
+                        children
+                      )}
+                    </code>
+                  ),
+                }}
+              >
+                {task.output}
+              </ReactMarkdown>
+            </div>
+          )}
           {task.error && <pre role="alert">{task.error}</pre>}
         </div>
       ) : (
@@ -161,26 +266,11 @@ function TaskOutput({ task }: { task: Task }) {
                 ) : changes.patchError ? (
                   <p role="alert">{changes.patchError}</p>
                 ) : (
-                  <pre>
-                    {changes.patch
-                      ? changes.patch.split('\n').map((line, index) => (
-                          <span
-                            key={index}
-                            className={
-                              line.startsWith('+')
-                                ? 'diff-add'
-                                : line.startsWith('-')
-                                  ? 'diff-remove'
-                                  : undefined
-                            }
-                          >
-                            {line}
-                            {'\n'}
-                          </span>
-                        ))
-                      : 'No diff available.'}
-                    {changes.truncated && '\n[Preview truncated]'}
-                  </pre>
+                  <CodeDiff
+                    patch={changes.patch}
+                    file={file}
+                    truncated={changes.truncated}
+                  />
                 )}
               </div>
             </>

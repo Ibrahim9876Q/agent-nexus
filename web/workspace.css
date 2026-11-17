@@ -2066,7 +2066,7 @@ kbd {
   font-size: 0.79rem;
   line-height: 1.65;
 }
-.output-patch pre span {
+.output-patch .diff-row {
   display: block;
   height: 1.65em;
   padding: 0 10px;
@@ -2076,6 +2076,76 @@ kbd {
 }
 .output-patch .diff-remove {
   background: #351f28;
+}
+.output-patch .diff-marker,
+.output-patch .diff-meta {
+  color: #aab8cb;
+}
+.output-patch .diff-heading {
+  color: #8ac4ff;
+  background: #12243a;
+}
+.output-patch .diff-add .diff-marker {
+  color: #85e4a2;
+}
+.output-patch .diff-remove .diff-marker {
+  color: #ffa4ae;
+}
+.output-syntax
+  :is(
+    .hljs-keyword,
+    .hljs-selector-tag,
+    .hljs-doctag,
+    .hljs-meta .hljs-keyword
+  ) {
+  color: #ffa0a8;
+}
+.output-syntax
+  :is(.hljs-string, .hljs-regexp, .hljs-template-tag, .hljs-quote) {
+  color: #a6dcff;
+}
+.output-syntax
+  :is(.hljs-number, .hljs-literal, .hljs-built_in, .hljs-attr, .hljs-property) {
+  color: #8cc8ff;
+}
+.output-syntax
+  :is(
+    .hljs-title,
+    .hljs-type,
+    .hljs-section,
+    .hljs-selector-class,
+    .hljs-selector-id
+  ) {
+  color: #dab5ff;
+}
+.output-syntax
+  :is(.hljs-name, .hljs-tag, .hljs-symbol, .hljs-bullet, .hljs-addition) {
+  color: #a5e6a3;
+}
+.output-syntax
+  :is(.hljs-variable, .hljs-template-variable, .hljs-meta, .hljs-attribute) {
+  color: #ffcd91;
+}
+.output-syntax :is(.hljs-comment, .hljs-punctuation) {
+  color: #aab8cb;
+}
+.output-syntax .hljs-deletion {
+  color: #ffa4ae;
+}
+.output-response {
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+.output-response pre {
+  background: #0b1018;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  overflow: auto;
+  white-space: pre;
+}
+.output-activity li code {
+  white-space: pre-wrap;
 }
 @media (max-width: 680px) {
   .output-view {
